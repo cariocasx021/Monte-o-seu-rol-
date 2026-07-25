@@ -147,13 +147,6 @@
   .success-wrap h3{ font-size:22px; margin:6px 0 10px; }
   .success-wrap p{ color:var(--muted); font-size:14px; line-height:1.6; margin:0 0 6px; }
   .success-wrap .approval{ font-size:13px; color:var(--gold); margin-top:14px; }
-  .mystery-box{
-    margin-top:20px; padding:16px; border-radius:12px;
-    background: rgba(255,255,255,0.05); border:1px dashed rgba(232,184,75,0.4);
-    text-align:left;
-  }
-  .mystery-title{ font-weight:700; font-size:14.5px; margin-bottom:6px; }
-  .mystery-box p{ color:var(--muted); font-size:13px; margin:0 0 12px; }
   .mystery-textarea{ resize:none; min-height:64px; font-family:'Inter'; }
 
   .countdown-box{
@@ -327,22 +320,22 @@ nameInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') submitName(
 
 /* ---------------- Plans data ---------------- */
 const PLANS = [
-  { key:'cafe', emoji:'❤️', name:'Café Premium', rating:4, romance:3, duration:'1h30', invest:'1 manhã livre',
+  { key:'cafe', emoji:'❤️', name:'Café Premium', rating:5, romance:3, invest:'1 manhã livre',
     gradient:'linear-gradient(135deg,#3b2415,#8a5a2c)',
     includes:['☕ Café especial','🍰 Sobremesa','💬 Conversa boa','🎧 Playlist chill'] },
-  { key:'sextou', emoji:'🍕', name:'Sextou', rating:4, romance:2, duration:'3h', invest:'1 noite livre',
+  { key:'sextou', emoji:'🍕', name:'Sextou', rating:5, romance:2, invest:'1 noite livre',
     gradient:'linear-gradient(135deg,#c0392b,#f39c12)',
     includes:['🍕 Pizza','🥤 Bebida gelada','😂 Muitas risadas'] },
-  { key:'cinema', emoji:'🎬', name:'Cinema VIP', rating:4, romance:3, duration:'2h30', invest:'1 tarde ou noite livre',
+  { key:'cinema', emoji:'🎬', name:'Cinema VIP', rating:5, romance:3, invest:'1 tarde ou noite livre',
     gradient:'linear-gradient(135deg,#1a1a2e,#6a11cb)',
     includes:['🎬 Filme escolhido a dois','🍿 Pipoca','🥤 Refrigerante','🛋️ Poltrona confortável'] },
-  { key:'aventura', emoji:'🥾', name:'Aventura', rating:4, romance:2, duration:'2h', invest:'1 tarde livre',
+  { key:'aventura', emoji:'🥾', name:'Aventura', rating:5, romance:2, invest:'1 tarde livre',
     gradient:'linear-gradient(135deg,#134e5e,#71b280)',
     includes:['🥾 Trilha','🚶 Caminhada','🍔 Lanche'] },
-  { key:'surpresa', emoji:'🎁', name:'Surpresa', rating:5, romance:4, duration:'❓', invest:'Confiança total 😏',
+  { key:'surpresa', emoji:'🎁', name:'Surpresa', rating:5, romance:4, invest:'Confiança total 😏',
     gradient:'linear-gradient(135deg,#41295a,#2F0743)',
     includes:['🎁 Surpresa total','❓ Destino secreto','🌹 Rosas de presente'] },
-  { key:'black', emoji:'💎', name:'Black Experience', rating:5, romance:5, duration:'Noite inteira', invest:'A noite toda + disposição',
+  { key:'black', emoji:'💎', name:'Black Experience', rating:5, romance:5, invest:'A noite toda + disposição',
     gradient:'linear-gradient(135deg,#0a0a0a,#3a2a12)',
     includes:['💎 Jantar especial','🥂 Brinde','🌹 Rosas','🎻 Trilha sonora ao vivo'] },
 ];
@@ -365,7 +358,6 @@ PLANS.forEach((p, i) => {
       <div class="plan-name">${p.emoji} ${p.name}</div>
       <div class="plan-meta">
         <span class="plan-stars">${stars(p.rating)}</span>
-        <span>⏱ ${p.duration}</span>
         <span>${hearts(p.romance)}</span>
         <span>💰 ${p.invest}</span>
       </div>
@@ -434,6 +426,42 @@ function renderPlanDateStep(p){
       return;
     }
     currentPlanAnswers = { day, time };
+    renderPlanPrefStep(p);
+  });
+}
+
+const PREF_OPTIONS = [
+  '💋 Bastante beijos',
+  '🤍 Mais carinho',
+  '🤗 Abraços demorados',
+  '🚶‍♀️ Caminhar de mãos dadas',
+  '🎁 Receber um mimo surpresa',
+  '✨ Atenção total pra você',
+  '🌹 Um clima bem romântico'
+];
+
+function renderPlanPrefStep(p){
+  planModal.innerHTML = `
+    <div class="modal-title">💭 O que você quer nesse encontro?</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Escolha até 3:</div>
+    <div class="contract-box" id="prefBox">
+      ${PREF_OPTIONS.map((opt,i) => `<label class="contract-item"><input type="checkbox" class="pref-check" data-opt="${opt}" ${((currentPlanAnswers.prefs||[]).includes(opt)) ? 'checked' : ''}> ${opt}</label>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="voltarBtn">⬅ Voltar</button>
+      <button class="btn-primary" id="continuarPrefBtn">Continuar</button>
+    </div>
+  `;
+  document.getElementById('voltarBtn').addEventListener('click', () => renderPlanDateStep(p));
+  const prefChecks = planModal.querySelectorAll('.pref-check');
+  function refreshPrefState(){
+    const checkedCount = [...prefChecks].filter(c => c.checked).length;
+    prefChecks.forEach(c => { if(!c.checked) c.disabled = checkedCount >= 3; });
+  }
+  prefChecks.forEach(c => c.addEventListener('change', refreshPrefState));
+  refreshPrefState();
+  document.getElementById('continuarPrefBtn').addEventListener('click', () => {
+    currentPlanAnswers.prefs = [...prefChecks].filter(c => c.checked).map(c => c.dataset.opt);
     renderPlanContractStep(p);
   });
 }
@@ -452,7 +480,7 @@ function renderPlanContractStep(p){
       <button class="btn-primary" id="assinarBtn" disabled style="opacity:0.5;">Assinar ❤️</button>
     </div>
   `;
-  document.getElementById('voltarBtn').addEventListener('click', () => renderPlanDateStep(p));
+  document.getElementById('voltarBtn').addEventListener('click', () => renderPlanPrefStep(p));
   const checks = planModal.querySelectorAll('.contract-check');
   const assinarBtn = document.getElementById('assinarBtn');
   checks.forEach(c => c.addEventListener('change', () => {
@@ -473,7 +501,7 @@ function confirmPlan(p){
     plano: p.name,
     dia: lastEncounter.dayLabel,
     horario: lastEncounter.timeLabel,
-    duracao: p.duration,
+    preferencias: (currentPlanAnswers.prefs || []).join(', ') || '(nenhuma escolhida)',
     inclui: p.includes.join(', ')
   });
   setTimeout(() => {
@@ -484,27 +512,12 @@ function confirmPlan(p){
         <p>Sua solicitação de <b>${p.name}</b> foi enviada<br>para a gerente da Victor Experience™.</p>
         <p style="font-size:13.5px;">📅 ${lastEncounter.dayLabel} · 🕔 ${lastEncounter.timeLabel}</p>
         <p class="approval">Tempo de aprovação: depende da cliente 😂❤️</p>
-        <div class="mystery-box">
-          <div class="mystery-title">🎁 Presente misterioso</div>
-          <p>Você vai ganhar um presente misterioso no nosso encontro! Só na hora você vai descobrir o que é 😉</p>
-          <textarea class="quiz-input mystery-textarea" id="mysteryGuess" placeholder="O que você acha que pode ser?"></textarea>
-        </div>
-        <div class="modal-actions" style="margin-top:16px;">
-          <button class="btn-ghost" id="pularBtn">Pular</button>
-          <button class="btn-primary" id="enviarPalpiteBtn">Enviar palpite ❤️</button>
+        <div class="modal-actions" style="margin-top:20px;">
+          <button class="btn-primary" id="fecharBtn" style="width:100%;">Fechar</button>
         </div>
       </div>
     `;
-    document.getElementById('pularBtn').addEventListener('click', closePlan);
-    document.getElementById('enviarPalpiteBtn').addEventListener('click', () => {
-      const guess = document.getElementById('mysteryGuess').value.trim();
-      sendToEmail('Palpite do presente misterioso', {
-        nome: visitorName,
-        plano: p.name,
-        palpite: guess || '(não escreveu um palpite)'
-      });
-      showMysteryThanks();
-    });
+    document.getElementById('fecharBtn').addEventListener('click', closePlan);
   }, 500);
 }
 
@@ -619,44 +632,14 @@ function renderQuizResult(){
         <div><span>💰 Estilo</span><b>${quizAnswers.style}</b></div>
         <div><span>✨ Especial</span><b>${quizAnswers.special}</b></div>
       </div>
-      <div class="mystery-box">
-        <div class="mystery-title">🎁 Presente misterioso</div>
-        <p>Você vai ganhar um presente misterioso no nosso encontro! Só na hora você vai descobrir o que é 😉</p>
-        <textarea class="quiz-input mystery-textarea" id="mysteryGuessQuiz" placeholder="O que você acha que pode ser?"></textarea>
-      </div>
       <div class="modal-actions">
-        <button class="btn-ghost" id="pularQuizBtn">Pular</button>
-        <button class="btn-primary" id="enviarPalpiteQuizBtn">Enviar palpite ❤️</button>
+        <button class="btn-ghost" id="refazerBtn">Refazer</button>
+        <button class="btn-primary" id="fecharQuizBtn">Fechar</button>
       </div>
     </div>
   `;
-  document.getElementById('pularQuizBtn').addEventListener('click', () => quizOverlay.classList.remove('show'));
-  document.getElementById('enviarPalpiteQuizBtn').addEventListener('click', () => {
-    const guess = document.getElementById('mysteryGuessQuiz').value.trim();
-    sendToEmail('Palpite do presente misterioso', {
-      nome: visitorName,
-      origem: 'Montar Meu Rolê',
-      palpite: guess || '(não escreveu um palpite)'
-    });
-    showMysteryThanks(true);
-  });
-}
-
-function showMysteryThanks(isQuiz){
-  const modalEl = isQuiz ? quizModal : planModal;
-  modalEl.innerHTML = `
-    <div class="success-wrap">
-      <div style="font-size:40px;">💌</div>
-      <h3>Palpite recebido!</h3>
-      <p>Guardadinho com carinho até o dia do encontro 🖤</p>
-      <div class="modal-actions" style="margin-top:20px;">
-        <button class="btn-primary" id="fecharFinalBtn" style="width:100%;">Fechar</button>
-      </div>
-    </div>
-  `;
-  document.getElementById('fecharFinalBtn').addEventListener('click', () => {
-    if(isQuiz){ quizOverlay.classList.remove('show'); } else { closePlan(); }
-  });
+  document.getElementById('refazerBtn').addEventListener('click', () => { quizStep=0; quizAnswers={}; renderQuizStep(); });
+  document.getElementById('fecharQuizBtn').addEventListener('click', () => quizOverlay.classList.remove('show'));
 }
 
 /* ---------------- Particles background ---------------- */
