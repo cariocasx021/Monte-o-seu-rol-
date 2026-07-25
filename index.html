@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Victor Experience™</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0b0a0d;
+    --bg-card: #17141a;
+    --accent: #ff3366;
+    --accent2: #ff8a5c;
+    --gold: #e8b84b;
+    --text: #f4f0f2;
+    --muted: #9a919d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Inter', sans-serif; overflow-x:hidden;
+  }
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; transition-duration:.001ms !important;} }
+  h1,h2,h3,.brand,.plan-name,.modal-title{ font-family:'Poppins', sans-serif; }
+
+  canvas#particles{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+  .topbar{
+    position:fixed; top:0; left:0; right:0; z-index:20;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 26px; backdrop-filter: blur(6px);
+    background: linear-gradient(to bottom, rgba(11,10,13,0.85), transparent);
+  }
+  .home-pill{
+    font-size:13px; color:var(--muted); background:rgba(255,255,255,0.06);
+    padding:8px 14px; border-radius:999px; border:1px solid rgba(255,255,255,0.08);
+  }
+  .music-btn{
+    width:38px; height:38px; border-radius:50%; border:1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06); color:var(--text); font-size:16px; cursor:pointer;
+  }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative; z-index:1; min-height:92vh; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:100px 20px 40px;
+  }
+  .hero-mark{ font-size:38px; margin-bottom:6px; filter: drop-shadow(0 0 14px rgba(255,51,102,0.5)); }
+  .brand{
+    font-size:clamp(32px, 7vw, 58px); font-weight:800; margin:0;
+    background: linear-gradient(100deg, #fff 20%, var(--accent) 60%, var(--gold) 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    letter-spacing:-0.02em;
+  }
+  .tagline{ color:var(--muted); font-size:clamp(14px,2.4vw,18px); margin:10px 0 34px; }
+  .cta{
+    background: linear-gradient(120deg, var(--accent), var(--accent2));
+    color:#fff; border:none; padding:16px 30px; border-radius:12px;
+    font-size:15.5px; font-weight:600; cursor:pointer; font-family:'Inter';
+    box-shadow: 0 0 0 rgba(255,51,102,0.5); transition: box-shadow .3s ease, transform .15s ease;
+  }
+  .cta:hover{ box-shadow: 0 0 34px rgba(255,51,102,0.55); transform: translateY(-2px); }
+  .cta:active{ transform: scale(0.97); }
+
+  /* ---------- PLANS ---------- */
+  .section{ position:relative; z-index:1; padding: 20px 24px 60px; max-width:1180px; margin:0 auto; }
+  .section-head{ margin-bottom:22px; }
+  .section-head .eyebrow{ color:var(--accent); font-size:12.5px; letter-spacing:0.14em; text-transform:uppercase; font-weight:600; }
+  .section-head h2{ font-size:clamp(22px,3.4vw,30px); margin:6px 0 0; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:20px; }
+
+  .plan-card{
+    position:relative; border-radius:16px; overflow:hidden; height:300px;
+    cursor:pointer; opacity:0; transform: translateY(18px);
+    animation: cardIn .5s ease forwards;
+    border:1px solid rgba(255,255,255,0.06);
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .plan-card:hover{ transform: translateY(-6px); box-shadow: 0 16px 40px -12px rgba(255,51,102,0.35); }
+  .plan-card:focus-visible{ outline:2px solid var(--gold); outline-offset:3px; }
+  @keyframes cardIn{ to{ opacity:1; transform:translateY(0); } }
+
+  .plan-bg{ position:absolute; inset:0; }
+  .plan-emoji-bg{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:130px; opacity:0.16; filter: blur(1px);
+  }
+  .plan-shade{ position:absolute; inset:0; background: linear-gradient(to top, rgba(0,0,0,0.88) 10%, rgba(0,0,0,0.15) 60%, transparent 100%); }
+
+  .plan-info{ position:absolute; left:0; right:0; bottom:0; padding:16px 16px 16px; }
+  .plan-name{ font-size:17px; font-weight:700; margin:0 0 6px; display:flex; align-items:center; gap:6px; }
+  .plan-meta{ display:flex; flex-wrap:wrap; gap:6px 12px; font-size:11.5px; color:#d8d0d6; margin-bottom:10px; }
+  .plan-meta span{ display:flex; align-items:center; gap:4px; }
+  .plan-stars{ color:var(--gold); letter-spacing:1px; }
+  .subscribe-btn{
+    width:100%; padding:9px 10px; border-radius:8px; border:none;
+    background: rgba(255,255,255,0.1); color:#fff; font-weight:600; font-size:13px;
+    cursor:pointer; transition: background .2s ease, box-shadow .2s ease;
+  }
+  .subscribe-btn:hover{ background: var(--accent); box-shadow: 0 0 18px rgba(255,51,102,0.5); }
+
+  /* ---------- ROLÊ CTA ---------- */
+  .role-section{ text-align:center; padding: 50px 24px 90px; position:relative; z-index:1; }
+  .role-section p{ color:var(--muted); max-width:420px; margin:0 auto 22px; font-size:14.5px; }
+  .role-btn{
+    background: linear-gradient(120deg, var(--gold), var(--accent));
+    border:none; color:#1a1219; font-weight:800; font-size:16px;
+    padding:18px 34px; border-radius:14px; cursor:pointer; font-family:'Poppins';
+    box-shadow: 0 0 26px rgba(232,184,75,0.25); transition: transform .15s ease, box-shadow .3s ease;
+  }
+  .role-btn:hover{ transform: translateY(-2px); box-shadow: 0 0 40px rgba(232,184,75,0.4); }
+  .role-btn:active{ transform: scale(0.97); }
+
+  footer{ text-align:center; color:var(--muted); font-size:12px; padding:26px; position:relative; z-index:1; }
+
+  /* ---------- MODAL ---------- */
+  .overlay{
+    position:fixed; inset:0; background: rgba(5,4,6,0.78); backdrop-filter: blur(4px);
+    display:flex; align-items:center; justify-content:center; z-index:100;
+    opacity:0; pointer-events:none; transition: opacity .25s ease; padding:20px;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .modal{
+    background: var(--bg-card); border-radius:20px; max-width:420px; width:100%;
+    padding:28px 26px 26px; position:relative; border:1px solid rgba(255,255,255,0.08);
+    transform: scale(0.94) translateY(10px); transition: transform .28s ease;
+    max-height:88vh; overflow-y:auto;
+  }
+  .overlay.show .modal{ transform: scale(1) translateY(0); }
+  .modal-title{ font-size:20px; font-weight:700; margin:0 0 14px; }
+  .includes-list{ list-style:none; padding:0; margin:0 0 22px; display:flex; flex-direction:column; gap:9px; }
+  .includes-list li{ font-size:14.5px; display:flex; align-items:center; gap:9px; color:#e6dee2; }
+  .modal-actions{ display:flex; gap:10px; }
+  .modal-actions button{
+    flex:1; padding:13px 14px; border-radius:10px; border:none; font-weight:600;
+    font-size:14px; cursor:pointer; font-family:'Inter';
+  }
+  .btn-primary{ background: linear-gradient(120deg, var(--accent), var(--accent2)); color:#fff; }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-ghost{ background: rgba(255,255,255,0.07); color:var(--text); }
+  .btn-ghost:hover{ background: rgba(255,255,255,0.13); }
+
+  .success-wrap{ text-align:center; padding:6px 0; }
+  .success-wrap h3{ font-size:22px; margin:6px 0 10px; }
+  .success-wrap p{ color:var(--muted); font-size:14px; line-height:1.6; margin:0 0 6px; }
+  .success-wrap .approval{ font-size:13px; color:var(--gold); margin-top:14px; }
+
+  /* ---------- QUIZ ---------- */
+  .quiz-progress{ display:flex; gap:6px; margin-bottom:18px; }
+  .quiz-progress span{ flex:1; height:4px; border-radius:99px; background: rgba(255,255,255,0.1); }
+  .quiz-progress span.done{ background: var(--accent); }
+  .quiz-q{ font-size:19px; font-weight:700; margin:0 0 18px; }
+  .quiz-opts{ display:flex; flex-direction:column; gap:10px; }
+  .quiz-input{
+    width:100%; padding:14px 16px; border-radius:12px; border:1.5px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.05); color:var(--text); font-size:15.5px; font-family:'Inter';
+    outline:none; transition: border-color .15s ease;
+  }
+  .quiz-input::placeholder{ color:var(--muted); }
+  .quiz-input:focus{ border-color: var(--accent); }
+  .quiz-opt{
+    padding:14px 16px; border-radius:12px; border:1.5px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04); color:var(--text); text-align:left;
+    font-size:15px; font-weight:600; cursor:pointer; transition: all .15s ease;
+  }
+  .quiz-opt:hover{ border-color: var(--accent); background: rgba(255,51,102,0.12); }
+  .quiz-opt:active{ transform: scale(0.98); }
+
+  .result-card{ text-align:center; }
+  .result-title{ font-size:20px; font-weight:800; margin:4px 0 4px; }
+  .result-compat{ color:var(--gold); font-weight:700; font-size:14px; margin-bottom:18px; }
+  .result-rows{ display:flex; flex-direction:column; gap:11px; text-align:left; margin-bottom:22px; }
+  .result-rows div{ display:flex; justify-content:space-between; font-size:14.5px; border-bottom:1px dashed rgba(255,255,255,0.1); padding-bottom:9px; }
+  .result-rows div b{ font-weight:600; }
+
+  /* confetti */
+  .confetti-piece{
+    position:fixed; top:-12px; width:9px; height:14px; z-index:200; pointer-events:none;
+    animation: fall linear forwards;
+  }
+  @keyframes fall{
+    to{ transform: translateY(105vh) rotate(540deg); opacity:0.9; }
+  }
+
+  @media (max-width:480px){
+    .grid{ grid-template-columns: 1fr 1fr; }
+    .plan-card{ height:230px; }
+    .plan-emoji-bg{ font-size:80px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<div class="topbar">
+  <span class="home-pill">🖤 Página inicial</span>
+  <button class="music-btn" id="musicBtn" title="Música ambiente">🎵</button>
+</div>
+
+<section class="hero">
+  <div class="hero-mark">🖤</div>
+  <h1 class="brand">Victor Experience™</h1>
+  <p class="tagline">Experiências inesquecíveis.</p>
+  <button class="cta" id="ctaPlanos">Conheça nossos planos</button>
+</section>
+
+<section class="section" id="planos">
+  <div class="section-head">
+    <div class="eyebrow">📦 Catálogo</div>
+    <h2>Planos</h2>
+  </div>
+  <div class="grid" id="plansGrid"></div>
+</section>
+
+<section class="role-section">
+  <h2 style="margin:0 0 8px;">Não sabe o que escolher?</h2>
+  <p>Responde 5 perguntas rápidas e a gente monta o encontro perfeito pra vocês.</p>
+  <button class="role-btn" id="roleBtn">❤️ Montar Meu Rolê</button>
+</section>
+
+<footer>Victor Experience™ — feito com 🖤 pra momentos que valem a pena.</footer>
+
+<div id="ytPlayer" style="position:fixed; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;"></div>
+
+<!-- Plan modal -->
+<div class="overlay" id="planOverlay">
+  <div class="modal" id="planModal"></div>
+</div>
+
+<!-- Quiz modal -->
+<div class="overlay" id="quizOverlay">
+  <div class="modal" id="quizModal"></div>
+</div>
+
+<script>
+/* ---------------- Plans data ---------------- */
+const PLANS = [
+  { key:'cafe', emoji:'❤️', name:'Café Premium', rating:4, romance:3, duration:'1h30', invest:'1 manhã livre',
+    gradient:'linear-gradient(135deg,#3b2415,#8a5a2c)',
+    includes:['☕ Café especial','🍰 Sobremesa','💬 Conversa boa','🎧 Playlist chill'] },
+  { key:'sextou', emoji:'🍕', name:'Sextou', rating:4, romance:2, duration:'3h', invest:'1 noite livre',
+    gradient:'linear-gradient(135deg,#c0392b,#f39c12)',
+    includes:['🍕 Pizza','🥤 Bebida gelada','😂 Muitas risadas'] },
+  { key:'cinema', emoji:'🎬', name:'Cinema VIP', rating:4, romance:3, duration:'2h30', invest:'1 tarde ou noite livre',
+    gradient:'linear-gradient(135deg,#1a1a2e,#6a11cb)',
+    includes:['🎬 Filme escolhido a dois','🍿 Pipoca','🥤 Refrigerante','🛋️ Poltrona confortável'] },
+  { key:'aventura', emoji:'🥾', name:'Aventura', rating:4, romance:2, duration:'2h', invest:'1 tarde livre',
+    gradient:'linear-gradient(135deg,#134e5e,#71b280)',
+    includes:['🥾 Trilha','🚶 Caminhada','🍔 Lanche'] },
+  { key:'surpresa', emoji:'🎁', name:'Surpresa', rating:5, romance:4, duration:'❓', invest:'Confiança total 😏',
+    gradient:'linear-gradient(135deg,#41295a,#2F0743)',
+    includes:['🎁 Surpresa total','❓ Destino secreto','🌹 Rosas de presente'] },
+  { key:'black', emoji:'💎', name:'Black Experience', rating:5, romance:5, duration:'Noite inteira', invest:'A noite toda + disposição',
+    gradient:'linear-gradient(135deg,#0a0a0a,#3a2a12)',
+    includes:['💎 Jantar especial','🥂 Brinde','🌹 Rosas','🎻 Trilha sonora ao vivo'] },
+];
+
+function stars(n){ return '★'.repeat(n) + '☆'.repeat(5-n); }
+function hearts(n){ return '❤️'.repeat(n); }
+
+const grid = document.getElementById('plansGrid');
+PLANS.forEach((p, i) => {
+  const card = document.createElement('div');
+  card.className = 'plan-card';
+  card.style.animationDelay = (i*0.06) + 's';
+  card.setAttribute('tabindex','0');
+  card.setAttribute('role','button');
+  card.innerHTML = `
+    <div class="plan-bg" style="background:${p.gradient}"></div>
+    <div class="plan-emoji-bg">${p.emoji}</div>
+    <div class="plan-shade"></div>
+    <div class="plan-info">
+      <div class="plan-name">${p.emoji} ${p.name}</div>
+      <div class="plan-meta">
+        <span class="plan-stars">${stars(p.rating)}</span>
+        <span>⏱ ${p.duration}</span>
+        <span>${hearts(p.romance)}</span>
+        <span>💰 ${p.invest}</span>
+      </div>
+      <button class="subscribe-btn" data-key="${p.key}">Assinar</button>
+    </div>
+  `;
+  grid.appendChild(card);
+  const openHandler = () => openPlan(p.key);
+  card.querySelector('.subscribe-btn').addEventListener('click', (e) => { e.stopPropagation(); openHandler(); });
+  card.addEventListener('keypress', (e) => { if(e.key === 'Enter') openHandler(); });
+});
+
+document.getElementById('ctaPlanos').addEventListener('click', () => {
+  document.getElementById('planos').scrollIntoView({behavior:'smooth'});
+});
+
+/* ---------------- Plan modal ---------------- */
+const planOverlay = document.getElementById('planOverlay');
+const planModal = document.getElementById('planModal');
+
+let currentPlanAnswers = {};
+
+function openPlan(key){
+  const p = PLANS.find(x => x.key === key);
+  currentPlanAnswers = {};
+  renderPlanIncludesStep(p);
+  planOverlay.classList.add('show');
+}
+
+function renderPlanIncludesStep(p){
+  planModal.innerHTML = `
+    <div class="modal-title">🎉 Você escolheu: ${p.name}</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Inclui:</div>
+    <ul class="includes-list">
+      ${p.includes.map(i => `<li>${i}</li>`).join('')}
+    </ul>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="voltarBtn">⬅ Voltar</button>
+      <button class="btn-primary" id="continuarBtn">Continuar</button>
+    </div>
+  `;
+  document.getElementById('voltarBtn').addEventListener('click', closePlan);
+  document.getElementById('continuarBtn').addEventListener('click', () => renderPlanDateStep(p));
+}
+
+function renderPlanDateStep(p){
+  planModal.innerHTML = `
+    <div class="modal-title">${p.emoji} ${p.name}</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Escolha o dia e o horário pra gente sair:</div>
+    <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+      <input type="text" class="quiz-input" id="planDayInput" placeholder="Qual dia? Ex: sábado" value="${currentPlanAnswers.day || ''}">
+      <input type="text" class="quiz-input" id="planTimeInput" placeholder="Qual horário? Ex: 19h00" value="${currentPlanAnswers.time || ''}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="voltarBtn">⬅ Voltar</button>
+      <button class="btn-primary" id="querBtn">❤️ Quero esse</button>
+    </div>
+  `;
+  document.getElementById('voltarBtn').addEventListener('click', () => renderPlanIncludesStep(p));
+  document.getElementById('querBtn').addEventListener('click', () => {
+    const day = document.getElementById('planDayInput').value.trim();
+    const time = document.getElementById('planTimeInput').value.trim();
+    currentPlanAnswers = { day: day || 'a combinar', time: time || 'a combinar' };
+    confirmPlan(p);
+  });
+}
+function closePlan(){ planOverlay.classList.remove('show'); }
+planOverlay.addEventListener('click', (e) => { if(e.target === planOverlay) closePlan(); });
+
+function confirmPlan(p){
+  burstConfetti();
+  sendToEmail('Novo plano escolhido: ' + p.name, {
+    plano: p.name,
+    dia: currentPlanAnswers.day,
+    horario: currentPlanAnswers.time,
+    duracao: p.duration,
+    inclui: p.includes.join(', ')
+  });
+  setTimeout(() => {
+    planModal.innerHTML = `
+      <div class="success-wrap">
+        <div style="font-size:40px;">🎊</div>
+        <h3>Parabéns!!</h3>
+        <p>Sua solicitação de <b>${p.name}</b> foi enviada<br>para a gerente da Victor Experience™.</p>
+        <p style="font-size:13.5px;">📅 ${currentPlanAnswers.day} · 🕔 ${currentPlanAnswers.time}</p>
+        <p class="approval">Tempo de aprovação: depende da cliente 😂❤️</p>
+        <div class="modal-actions" style="margin-top:20px;">
+          <button class="btn-primary" id="fecharBtn" style="width:100%;">Fechar</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('fecharBtn').addEventListener('click', closePlan);
+  }, 500);
+}
+
+/* ---------------- Envio de e-mail (Web3Forms) ---------------- */
+const WEB3FORMS_ACCESS_KEY = '747ff5e6-a040-431c-ac43-a66fbd848693';
+
+function sendToEmail(subject, fields){
+  if(WEB3FORMS_ACCESS_KEY === 'COLE_SUA_CHAVE_AQUI'){
+    console.warn('Web3Forms: chave ainda não configurada — e-mail não enviado.');
+    return;
+  }
+  fetch('https://api.web3forms.com/submit', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'Accept':'application/json' },
+    body: JSON.stringify({
+      access_key: WEB3FORMS_ACCESS_KEY,
+      subject: subject,
+      ...fields
+    })
+  }).catch(err => console.warn('Web3Forms: falha ao enviar', err));
+}
+
+/* ---------------- Confetti ---------------- */
+function burstConfetti(){
+  const colors = ['#ff3366','#ff8a5c','#e8b84b','#ffffff','#ff5c93'];
+  for(let i=0;i<60;i++){
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random()*100 + 'vw';
+    piece.style.background = colors[Math.floor(Math.random()*colors.length)];
+    piece.style.animationDuration = (2 + Math.random()*1.5) + 's';
+    piece.style.opacity = 0.7 + Math.random()*0.3;
+    piece.style.transform = `rotate(${Math.random()*360}deg)`;
+    document.body.appendChild(piece);
+    setTimeout(() => piece.remove(), 3600);
+  }
+}
+
+/* ---------------- Quiz "Montar Meu Rolê" ---------------- */
+const QUIZ = [
+  { q:'Qual é o melhor dia?', key:'day', placeholder:'Ex: sábado' },
+  { q:'Qual é o melhor horário?', key:'time', placeholder:'Ex: 19h00' },
+  { q:'Aonde você pretende ir?', key:'place', placeholder:'Ex: praia, shopping, parque...' },
+  { q:'Qual tipo de comida você quer?', key:'food', placeholder:'Ex: pizza, sushi...' },
+];
+let quizStep = 0;
+let quizAnswers = {};
+const quizOverlay = document.getElementById('quizOverlay');
+const quizModal = document.getElementById('quizModal');
+
+document.getElementById('roleBtn').addEventListener('click', () => {
+  quizStep = 0; quizAnswers = {};
+  quizOverlay.classList.add('show');
+  renderQuizStep();
+});
+quizOverlay.addEventListener('click', (e) => { if(e.target === quizOverlay) quizOverlay.classList.remove('show'); });
+
+function renderQuizStep(){
+  const step = QUIZ[quizStep];
+  const isLast = quizStep === QUIZ.length - 1;
+  quizModal.innerHTML = `
+    <div class="quiz-progress">
+      ${QUIZ.map((_,i) => `<span class="${i<=quizStep ? 'done' : ''}"></span>`).join('')}
+    </div>
+    <div class="quiz-q">${step.q}</div>
+    <input type="text" class="quiz-input" id="quizInput" placeholder="${step.placeholder}" value="${quizAnswers[step.key] || ''}" autocomplete="off">
+    <div class="modal-actions" style="margin-top:16px;">
+      ${quizStep > 0 ? '<button class="btn-ghost" id="quizBackBtn">⬅ Voltar</button>' : ''}
+      <button class="btn-primary" id="quizNextBtn">${isLast ? 'Ver meu rolê ❤️' : 'Próxima'}</button>
+    </div>
+  `;
+  const input = document.getElementById('quizInput');
+  input.focus();
+  const advance = () => {
+    const val = input.value.trim();
+    quizAnswers[step.key] = val || step.placeholder.replace('Ex: ','');
+    if(isLast){ renderQuizResult(); }
+    else { quizStep++; renderQuizStep(); }
+  };
+  document.getElementById('quizNextBtn').addEventListener('click', advance);
+  input.addEventListener('keydown', (e) => { if(e.key === 'Enter') advance(); });
+  if(quizStep > 0){
+    document.getElementById('quizBackBtn').addEventListener('click', () => { quizStep--; renderQuizStep(); });
+  }
+}
+
+function renderQuizResult(){
+  const compat = 90 + Math.floor(Math.random()*10);
+  sendToEmail('Rolê montado pelo quiz', {
+    dia: quizAnswers.day,
+    horario: quizAnswers.time,
+    lugar: quizAnswers.place,
+    comida: quizAnswers.food,
+    compatibilidade: compat + '%'
+  });
+
+  quizModal.innerHTML = `
+    <div class="result-card">
+      <div style="font-size:34px;">❤️</div>
+      <div class="result-title">Seu Rolê Ideal</div>
+      <div class="result-compat">⭐ Compatibilidade: ${compat}%</div>
+      <div class="result-rows">
+        <div><span>📅 Dia</span><b>${quizAnswers.day}</b></div>
+        <div><span>🕔 Horário</span><b>${quizAnswers.time}</b></div>
+        <div><span>📍 Lugar</span><b>${quizAnswers.place}</b></div>
+        <div><span>🍽️ Comida</span><b>${quizAnswers.food}</b></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="refazerBtn">Refazer</button>
+        <button class="btn-primary" id="fecharQuizBtn">Fechar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('refazerBtn').addEventListener('click', () => { quizStep=0; quizAnswers={}; renderQuizStep(); });
+  document.getElementById('fecharQuizBtn').addEventListener('click', () => quizOverlay.classList.remove('show'));
+}
+
+/* ---------------- Particles background ---------------- */
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+let particles = [];
+function resizeCanvas(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function initParticles(){
+  particles = [];
+  const count = Math.min(60, Math.floor(window.innerWidth/22));
+  for(let i=0;i<count;i++){
+    particles.push({
+      x: Math.random()*canvas.width,
+      y: Math.random()*canvas.height,
+      r: 0.6 + Math.random()*1.8,
+      vy: 0.15 + Math.random()*0.35,
+      vx: (Math.random()-0.5)*0.15,
+      alpha: 0.15 + Math.random()*0.35
+    });
+  }
+}
+initParticles();
+window.addEventListener('resize', initParticles);
+
+function drawParticles(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  particles.forEach(p => {
+    p.y -= p.vy; p.x += p.vx;
+    if(p.y < -10) p.y = canvas.height + 10;
+    if(p.x < -10) p.x = canvas.width + 10;
+    if(p.x > canvas.width+10) p.x = -10;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,138,92,${p.alpha})`;
+    ctx.fill();
+  });
+  requestAnimationFrame(drawParticles);
+}
+if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  requestAnimationFrame(drawParticles);
+}
+
+/* ---------------- Música de fundo (YouTube) ---------------- */
+const musicBtn = document.getElementById('musicBtn');
+const YT_VIDEO_ID = 'Ylf8gJQe8So';
+let ytPlayer = null;
+let ytReady = false;
+let musicOn = false;
+let pendingPlay = false;
+
+const tag = document.createElement('script');
+tag.src = 'https://www.youtube.com/iframe_api';
+document.head.appendChild(tag);
+
+window.onYouTubeIframeAPIReady = function(){
+  ytPlayer = new YT.Player('ytPlayer', {
+    height: '1', width: '1', videoId: YT_VIDEO_ID,
+    playerVars: {
+      autoplay: 0, controls: 0, start: 35,
+      modestbranding: 1, disablekb: 1, fs: 0
+    },
+    events: {
+      onReady: function(){
+        ytReady = true;
+        ytPlayer.setVolume(45);
+        if(pendingPlay){ ytPlayer.playVideo(); pendingPlay = false; }
+      },
+      onStateChange: function(e){
+        if(e.data === YT.PlayerState.ENDED){
+          ytPlayer.seekTo(35, true);
+          ytPlayer.playVideo();
+        }
+      }
+    }
+  });
+};
+
+musicBtn.addEventListener('click', () => {
+  musicOn = !musicOn;
+  musicBtn.textContent = musicOn ? '🔊' : '🎵';
+  if(musicOn){
+    if(ytReady){ ytPlayer.playVideo(); } else { pendingPlay = true; }
+  } else {
+    if(ytReady){ ytPlayer.pauseVideo(); }
+    pendingPlay = false;
+  }
+});
+</script>
+</body>
+</html>
