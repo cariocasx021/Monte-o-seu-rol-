@@ -194,6 +194,17 @@
 </head>
 <body>
 
+<div class="overlay show" id="nameGate" style="z-index:300;">
+  <div class="modal">
+    <div class="modal-title">🖤 Antes de começar...</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Como você se chama?</div>
+    <input type="text" class="quiz-input" id="nameInput" placeholder="Seu nome" autocomplete="off" style="margin-bottom:18px;">
+    <div class="modal-actions">
+      <button class="btn-primary" id="nameSubmitBtn" style="width:100%;">Entrar ❤️</button>
+    </div>
+  </div>
+</div>
+
 <canvas id="particles"></canvas>
 
 <div class="topbar">
@@ -237,6 +248,23 @@
 </div>
 
 <script>
+/* ---------------- Nome da visitante ---------------- */
+let visitorName = '';
+const nameGate = document.getElementById('nameGate');
+const nameInput = document.getElementById('nameInput');
+nameInput.focus();
+
+function submitName(){
+  const val = nameInput.value.trim();
+  if(!val){ nameInput.style.borderColor = 'var(--accent)'; nameInput.focus(); return; }
+  visitorName = val;
+  nameGate.classList.remove('show');
+  const tagline = document.querySelector('.tagline');
+  if(tagline) tagline.textContent = 'Oi, ' + visitorName + '! Experiências inesquecíveis.';
+}
+document.getElementById('nameSubmitBtn').addEventListener('click', submitName);
+nameInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') submitName(); });
+
 /* ---------------- Plans data ---------------- */
 const PLANS = [
   { key:'cafe', emoji:'❤️', name:'Café Premium', rating:4, romance:3, duration:'1h30', invest:'1 manhã livre',
@@ -350,6 +378,7 @@ planOverlay.addEventListener('click', (e) => { if(e.target === planOverlay) clos
 function confirmPlan(p){
   burstConfetti();
   sendToEmail('Novo plano escolhido: ' + p.name, {
+    nome: visitorName,
     plano: p.name,
     dia: currentPlanAnswers.day,
     horario: currentPlanAnswers.time,
@@ -459,6 +488,7 @@ function renderQuizStep(){
 function renderQuizResult(){
   const compat = 90 + Math.floor(Math.random()*10);
   sendToEmail('Rolê montado pelo quiz', {
+    nome: visitorName,
     dia: quizAnswers.day,
     horario: quizAnswers.time,
     lugar: quizAnswers.place,
