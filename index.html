@@ -156,18 +156,32 @@
   .mystery-box p{ color:var(--muted); font-size:13px; margin:0 0 12px; }
   .mystery-textarea{ resize:none; min-height:64px; font-family:'Inter'; }
 
-  .gallery-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:14px; }
-  .gallery-item{
-    position:relative; border-radius:12px; overflow:hidden; aspect-ratio:1/1;
-    background: var(--bg-card); border:1px solid rgba(255,255,255,0.06);
-    opacity:0; animation: cardIn .4s ease forwards;
+  .countdown-box{
+    background: var(--bg-card); border:1px solid rgba(255,255,255,0.08);
+    border-radius:16px; padding:22px; text-align:center;
   }
-  .gallery-item img{ width:100%; height:100%; object-fit:cover; display:block; }
-  .gallery-caption{
-    position:absolute; left:0; right:0; bottom:0; padding:8px 10px;
-    background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
-    font-size:11.5px; color:#f1e6d4; font-family:'Inter';
+  .countdown-label{ color:var(--muted); font-size:13px; margin-bottom:14px; }
+  .countdown-timer{ display:flex; justify-content:center; gap:14px; }
+  .countdown-timer div{ display:flex; flex-direction:column; align-items:center; min-width:52px; }
+  .countdown-timer b{ font-family:'Poppins'; font-size:26px; font-weight:700; color:var(--gold); }
+  .countdown-timer span{ font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; }
+  .countdown-ready{ font-family:'Poppins'; font-weight:700; font-size:18px; color:var(--accent); }
+
+  .feedback-box{
+    background: var(--bg-card); border:1px solid rgba(255,255,255,0.08);
+    border-radius:16px; padding:22px; max-width:440px;
   }
+  .stars-input{ font-size:30px; letter-spacing:6px; color:rgba(255,255,255,0.15); cursor:pointer; }
+  .stars-input span{ transition: color .15s ease; }
+  .stars-input span.filled{ color: var(--gold); }
+
+  .contract-box{ display:flex; flex-direction:column; gap:14px; margin-bottom:20px; }
+  .contract-item{
+    display:flex; align-items:center; gap:10px; font-size:14.5px; cursor:pointer;
+    background: rgba(255,255,255,0.04); padding:12px 14px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.08);
+  }
+  .contract-item input{ width:18px; height:18px; accent-color: var(--accent); cursor:pointer; }
 
   /* ---------- QUIZ ---------- */
   .quiz-progress{ display:flex; gap:6px; margin-bottom:18px; }
@@ -254,13 +268,29 @@
   <button class="role-btn" id="roleBtn">❤️ Montar Meu Rolê</button>
 </section>
 
-<section class="section" id="galeria">
+<section class="section" id="contagem">
   <div class="section-head">
-    <div class="eyebrow">📸 Nossos Momentos</div>
-    <h2>Galeria de Fotos</h2>
+    <div class="eyebrow">⏳ Contagem regressiva</div>
+    <h2>Faltam quanto para o nosso encontro?</h2>
   </div>
-  <button class="cta" id="addPhotoBtn" style="margin-bottom:20px;">+ Adicionar foto</button>
-  <div class="gallery-grid" id="galleryGrid"></div>
+  <div class="countdown-box" id="countdownBox">
+    <p style="color:var(--muted); font-size:14px; margin:0;">Assim que você reservar um encontro, a contagem aparece aqui 🖤</p>
+  </div>
+</section>
+
+<section class="section" id="feedback">
+  <div class="section-head">
+    <div class="eyebrow">💬 Feedback</div>
+    <h2 id="feedbackTitle">Como foi nosso encontro?</h2>
+  </div>
+  <div class="feedback-box">
+    <p id="feedbackSubtitle" style="color:var(--muted); font-size:14px; margin:0 0 16px;">Reserve um encontro pra poder deixar seu feedback depois 🖤</p>
+    <div class="stars-input" id="starsInput">
+      <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+    </div>
+    <textarea class="quiz-input mystery-textarea" id="feedbackText" placeholder="O que poderia melhorar?" style="margin-top:14px;"></textarea>
+    <button class="btn-primary" id="enviarFeedbackBtn" style="width:100%; margin-top:14px;">Enviar feedback</button>
+  </div>
 </section>
 
 <footer>Victor Experience™ — feito com 🖤 pra momentos que valem a pena.</footer>
@@ -275,11 +305,6 @@
 <!-- Quiz modal -->
 <div class="overlay" id="quizOverlay">
   <div class="modal" id="quizModal"></div>
-</div>
-
-<!-- Photo modal -->
-<div class="overlay" id="photoOverlay">
-  <div class="modal" id="photoModal"></div>
 </div>
 
 <script>
@@ -391,33 +416,63 @@ function renderPlanDateStep(p){
     <div class="modal-title">${p.emoji} ${p.name}</div>
     <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Escolha o dia e o horário pra gente sair:</div>
     <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
-      <input type="text" class="quiz-input" id="planDayInput" placeholder="Qual dia? Ex: sábado" value="${currentPlanAnswers.day || ''}">
-      <input type="text" class="quiz-input" id="planTimeInput" placeholder="Qual horário? Ex: 19h00" value="${currentPlanAnswers.time || ''}">
+      <input type="date" class="quiz-input" id="planDayInput" value="${currentPlanAnswers.day || ''}">
+      <input type="time" class="quiz-input" id="planTimeInput" value="${currentPlanAnswers.time || ''}">
     </div>
     <div class="modal-actions">
       <button class="btn-ghost" id="voltarBtn">⬅ Voltar</button>
-      <button class="btn-primary" id="querBtn">❤️ Quero esse</button>
+      <button class="btn-primary" id="continuarDataBtn">Continuar</button>
     </div>
   `;
   document.getElementById('voltarBtn').addEventListener('click', () => renderPlanIncludesStep(p));
-  document.getElementById('querBtn').addEventListener('click', () => {
-    const day = document.getElementById('planDayInput').value.trim();
-    const time = document.getElementById('planTimeInput').value.trim();
-    currentPlanAnswers = { day: day || 'a combinar', time: time || 'a combinar' };
-    confirmPlan(p);
+  document.getElementById('continuarDataBtn').addEventListener('click', () => {
+    const day = document.getElementById('planDayInput').value;
+    const time = document.getElementById('planTimeInput').value;
+    if(!day || !time){
+      if(!day) document.getElementById('planDayInput').style.borderColor = 'var(--accent)';
+      if(!time) document.getElementById('planTimeInput').style.borderColor = 'var(--accent)';
+      return;
+    }
+    currentPlanAnswers = { day, time };
+    renderPlanContractStep(p);
   });
+}
+
+function renderPlanContractStep(p){
+  planModal.innerHTML = `
+    <div class="modal-title">📜 Antes de assinar...</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Eu aceito:</div>
+    <div class="contract-box">
+      <label class="contract-item"><input type="checkbox" class="contract-check"> Dar risada.</label>
+      <label class="contract-item"><input type="checkbox" class="contract-check"> Aproveitar o momento.</label>
+      <label class="contract-item"><input type="checkbox" class="contract-check"> Não olhar o celular toda hora.</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="voltarBtn">⬅ Voltar</button>
+      <button class="btn-primary" id="assinarBtn" disabled style="opacity:0.5;">Assinar ❤️</button>
+    </div>
+  `;
+  document.getElementById('voltarBtn').addEventListener('click', () => renderPlanDateStep(p));
+  const checks = planModal.querySelectorAll('.contract-check');
+  const assinarBtn = document.getElementById('assinarBtn');
+  checks.forEach(c => c.addEventListener('change', () => {
+    const allChecked = [...checks].every(x => x.checked);
+    assinarBtn.disabled = !allChecked;
+    assinarBtn.style.opacity = allChecked ? '1' : '0.5';
+  }));
+  assinarBtn.addEventListener('click', () => confirmPlan(p));
 }
 function closePlan(){ planOverlay.classList.remove('show'); }
 planOverlay.addEventListener('click', (e) => { if(e.target === planOverlay) closePlan(); });
 
 function confirmPlan(p){
   burstConfetti();
-  encounterHistory.unshift({ label: p.name + ' — ' + currentPlanAnswers.day + ' às ' + currentPlanAnswers.time });
+  setLastEncounter(p.name, currentPlanAnswers.day, currentPlanAnswers.time);
   sendToEmail('Novo plano escolhido: ' + p.name, {
     nome: visitorName,
     plano: p.name,
-    dia: currentPlanAnswers.day,
-    horario: currentPlanAnswers.time,
+    dia: lastEncounter.dayLabel,
+    horario: lastEncounter.timeLabel,
     duracao: p.duration,
     inclui: p.includes.join(', ')
   });
@@ -427,7 +482,7 @@ function confirmPlan(p){
         <div style="font-size:40px;">🎊</div>
         <h3>Parabéns!!</h3>
         <p>Sua solicitação de <b>${p.name}</b> foi enviada<br>para a gerente da Victor Experience™.</p>
-        <p style="font-size:13.5px;">📅 ${currentPlanAnswers.day} · 🕔 ${currentPlanAnswers.time}</p>
+        <p style="font-size:13.5px;">📅 ${lastEncounter.dayLabel} · 🕔 ${lastEncounter.timeLabel}</p>
         <p class="approval">Tempo de aprovação: depende da cliente 😂❤️</p>
         <div class="mystery-box">
           <div class="mystery-title">🎁 Presente misterioso</div>
@@ -454,7 +509,7 @@ function confirmPlan(p){
 }
 
 /* ---------------- Envio de e-mail (Web3Forms) ---------------- */
-const WEB3FORMS_ACCESS_KEY = '747ff5e6-a040-431c-ac43-a66fbd848693';
+const WEB3FORMS_ACCESS_KEY = '5debef3a-6f44-4298-8f38-ac4e6110e30f';
 
 function sendToEmail(subject, fields){
   if(WEB3FORMS_ACCESS_KEY === 'COLE_SUA_CHAVE_AQUI'){
@@ -693,70 +748,93 @@ musicBtn.addEventListener('click', () => {
   }
 });
 
-/* ---------------- Galeria de fotos ---------------- */
-let encounterHistory = [];
-let galleryPhotos = [];
-const photoOverlay = document.getElementById('photoOverlay');
-const photoModal = document.getElementById('photoModal');
+/* ---------------- Contagem regressiva ---------------- */
+let lastEncounter = null; // { planName, dateObj, dayLabel, timeLabel }
+let countdownInterval = null;
 
-function readFileAsDataURL(file){
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+function setLastEncounter(planName, dateStr, timeStr){
+  let dateObj = null;
+  if(dateStr){
+    const [h, m] = (timeStr || '00:00').split(':').map(Number);
+    dateObj = new Date(dateStr + 'T00:00:00');
+    if(!isNaN(h)) dateObj.setHours(h || 0, m || 0, 0, 0);
+  }
+  lastEncounter = {
+    planName,
+    dateObj,
+    dayLabel: dateStr ? new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR') : 'a combinar',
+    timeLabel: timeStr || 'a combinar'
+  };
+  startCountdown();
+  updateFeedbackSection();
 }
 
-function openPhotoModal(){
-  const hasHistory = encounterHistory.length > 0;
-  photoModal.innerHTML = `
-    <div class="modal-title">📸 Adicionar foto</div>
-    <div style="color:var(--muted); font-size:13.5px; margin-bottom:14px;">Escolha a foto e o encontro dela:</div>
-    <input type="file" accept="image/*" id="photoFileInput" class="quiz-input" style="padding:10px; margin-bottom:12px;">
-    ${hasHistory
-      ? `<select id="photoEncounterSelect" class="quiz-input" style="margin-bottom:12px;">
-           ${encounterHistory.map((e,i) => `<option value="${i}">${e.label}</option>`).join('')}
-         </select>`
-      : `<input type="text" id="photoDateInput" class="quiz-input" placeholder="Data do encontro (ex: sábado, 19h)" style="margin-bottom:12px;">`
-    }
-    <div class="modal-actions">
-      <button class="btn-ghost" id="fecharPhotoBtn">Cancelar</button>
-      <button class="btn-primary" id="salvarPhotoBtn">Adicionar</button>
-    </div>
-  `;
-  photoOverlay.classList.add('show');
-  document.getElementById('fecharPhotoBtn').addEventListener('click', () => photoOverlay.classList.remove('show'));
-  document.getElementById('salvarPhotoBtn').addEventListener('click', async () => {
-    const fileInput = document.getElementById('photoFileInput');
-    if(!fileInput.files || !fileInput.files[0]){ fileInput.style.borderColor = 'var(--accent)'; return; }
-    const dataUrl = await readFileAsDataURL(fileInput.files[0]);
-    const label = hasHistory
-      ? encounterHistory[document.getElementById('photoEncounterSelect').value].label
-      : (document.getElementById('photoDateInput').value.trim() || 'Data não informada');
-    galleryPhotos.unshift({ src: dataUrl, label });
-    renderGallery();
-    photoOverlay.classList.remove('show');
-  });
-}
-
-function renderGallery(){
-  const grid = document.getElementById('galleryGrid');
-  if(!galleryPhotos.length){
-    grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:var(--muted); padding:30px 0; font-size:14px;">Nenhuma foto ainda. As fotos dos nossos encontros vão aparecer aqui 💕</div>`;
+function startCountdown(){
+  const box = document.getElementById('countdownBox');
+  if(countdownInterval) clearInterval(countdownInterval);
+  if(!lastEncounter || !lastEncounter.dateObj){
+    box.innerHTML = `<p style="color:var(--muted); font-size:14px; margin:0;">Assim que você reservar um encontro com data e horário, a contagem aparece aqui 🖤</p>`;
     return;
   }
-  grid.innerHTML = galleryPhotos.map(ph => `
-    <div class="gallery-item">
-      <img src="${ph.src}" alt="Foto do encontro">
-      <div class="gallery-caption">📅 ${ph.label}</div>
-    </div>
-  `).join('');
+  function tick(){
+    const diff = lastEncounter.dateObj.getTime() - Date.now();
+    if(diff <= 0){
+      box.innerHTML = `<div class="countdown-ready">🎉 Chegou o dia do nosso encontro!</div>`;
+      clearInterval(countdownInterval);
+      return;
+    }
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    box.innerHTML = `
+      <div class="countdown-label">${lastEncounter.planName} · ${lastEncounter.dayLabel} às ${lastEncounter.timeLabel}</div>
+      <div class="countdown-timer">
+        <div><b>${d}</b><span>dias</span></div>
+        <div><b>${String(h).padStart(2,'0')}</b><span>horas</span></div>
+        <div><b>${String(m).padStart(2,'0')}</b><span>min</span></div>
+        <div><b>${String(s).padStart(2,'0')}</b><span>seg</span></div>
+      </div>
+    `;
+  }
+  tick();
+  countdownInterval = setInterval(tick, 1000);
 }
 
-document.getElementById('addPhotoBtn').addEventListener('click', openPhotoModal);
-photoOverlay.addEventListener('click', (e) => { if(e.target === photoOverlay) photoOverlay.classList.remove('show'); });
-renderGallery();
+/* ---------------- Feedback ---------------- */
+let feedbackRating = 0;
+const starsInput = document.getElementById('starsInput');
+
+function updateFeedbackSection(){
+  const subtitle = document.getElementById('feedbackSubtitle');
+  if(lastEncounter){
+    subtitle.textContent = `Como foi o rolê que você marcou no dia ${lastEncounter.dayLabel} no horário ${lastEncounter.timeLabel} com o Victor? O que poderia melhorar?`;
+  }
+}
+
+starsInput.querySelectorAll('span').forEach(star => {
+  star.addEventListener('click', () => {
+    feedbackRating = Number(star.dataset.v);
+    starsInput.querySelectorAll('span').forEach(s => {
+      s.classList.toggle('filled', Number(s.dataset.v) <= feedbackRating);
+    });
+  });
+});
+
+document.getElementById('enviarFeedbackBtn').addEventListener('click', () => {
+  const text = document.getElementById('feedbackText').value.trim();
+  sendToEmail('Feedback do rolê', {
+    nome: visitorName,
+    plano: lastEncounter ? lastEncounter.planName : '(não informado)',
+    dia: lastEncounter ? lastEncounter.dayLabel : '(não informado)',
+    horario: lastEncounter ? lastEncounter.timeLabel : '(não informado)',
+    estrelas: feedbackRating ? feedbackRating + '/5' : '(sem nota)',
+    comentario: text || '(sem comentário)'
+  });
+  document.querySelector('#feedback .feedback-box').innerHTML =
+    `<p style="text-align:center; color:var(--gold); font-size:14.5px;">💌 Obrigado pelo feedback!</p>`;
+});
+
 </script>
 </body>
 </html>
