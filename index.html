@@ -147,6 +147,27 @@
   .success-wrap h3{ font-size:22px; margin:6px 0 10px; }
   .success-wrap p{ color:var(--muted); font-size:14px; line-height:1.6; margin:0 0 6px; }
   .success-wrap .approval{ font-size:13px; color:var(--gold); margin-top:14px; }
+  .mystery-box{
+    margin-top:20px; padding:16px; border-radius:12px;
+    background: rgba(255,255,255,0.05); border:1px dashed rgba(232,184,75,0.4);
+    text-align:left;
+  }
+  .mystery-title{ font-weight:700; font-size:14.5px; margin-bottom:6px; }
+  .mystery-box p{ color:var(--muted); font-size:13px; margin:0 0 12px; }
+  .mystery-textarea{ resize:none; min-height:64px; font-family:'Inter'; }
+
+  .gallery-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:14px; }
+  .gallery-item{
+    position:relative; border-radius:12px; overflow:hidden; aspect-ratio:1/1;
+    background: var(--bg-card); border:1px solid rgba(255,255,255,0.06);
+    opacity:0; animation: cardIn .4s ease forwards;
+  }
+  .gallery-item img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .gallery-caption{
+    position:absolute; left:0; right:0; bottom:0; padding:8px 10px;
+    background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
+    font-size:11.5px; color:#f1e6d4; font-family:'Inter';
+  }
 
   /* ---------- QUIZ ---------- */
   .quiz-progress{ display:flex; gap:6px; margin-bottom:18px; }
@@ -229,8 +250,17 @@
 
 <section class="role-section">
   <h2 style="margin:0 0 8px;">Não sabe o que escolher?</h2>
-  <p>Responde 5 perguntas rápidas e a gente monta o encontro perfeito pra vocês.</p>
+  <p>Responde algumas perguntas rápidas que a gente monta um encontro perfeito para você.</p>
   <button class="role-btn" id="roleBtn">❤️ Montar Meu Rolê</button>
+</section>
+
+<section class="section" id="galeria">
+  <div class="section-head">
+    <div class="eyebrow">📸 Nossos Momentos</div>
+    <h2>Galeria de Fotos</h2>
+  </div>
+  <button class="cta" id="addPhotoBtn" style="margin-bottom:20px;">+ Adicionar foto</button>
+  <div class="gallery-grid" id="galleryGrid"></div>
 </section>
 
 <footer>Victor Experience™ — feito com 🖤 pra momentos que valem a pena.</footer>
@@ -245,6 +275,11 @@
 <!-- Quiz modal -->
 <div class="overlay" id="quizOverlay">
   <div class="modal" id="quizModal"></div>
+</div>
+
+<!-- Photo modal -->
+<div class="overlay" id="photoOverlay">
+  <div class="modal" id="photoModal"></div>
 </div>
 
 <script>
@@ -377,6 +412,7 @@ planOverlay.addEventListener('click', (e) => { if(e.target === planOverlay) clos
 
 function confirmPlan(p){
   burstConfetti();
+  encounterHistory.unshift({ label: p.name + ' — ' + currentPlanAnswers.day + ' às ' + currentPlanAnswers.time });
   sendToEmail('Novo plano escolhido: ' + p.name, {
     nome: visitorName,
     plano: p.name,
@@ -393,12 +429,27 @@ function confirmPlan(p){
         <p>Sua solicitação de <b>${p.name}</b> foi enviada<br>para a gerente da Victor Experience™.</p>
         <p style="font-size:13.5px;">📅 ${currentPlanAnswers.day} · 🕔 ${currentPlanAnswers.time}</p>
         <p class="approval">Tempo de aprovação: depende da cliente 😂❤️</p>
-        <div class="modal-actions" style="margin-top:20px;">
-          <button class="btn-primary" id="fecharBtn" style="width:100%;">Fechar</button>
+        <div class="mystery-box">
+          <div class="mystery-title">🎁 Presente misterioso</div>
+          <p>Você vai ganhar um presente misterioso no nosso encontro! Só na hora você vai descobrir o que é 😉</p>
+          <textarea class="quiz-input mystery-textarea" id="mysteryGuess" placeholder="O que você acha que pode ser?"></textarea>
+        </div>
+        <div class="modal-actions" style="margin-top:16px;">
+          <button class="btn-ghost" id="pularBtn">Pular</button>
+          <button class="btn-primary" id="enviarPalpiteBtn">Enviar palpite ❤️</button>
         </div>
       </div>
     `;
-    document.getElementById('fecharBtn').addEventListener('click', closePlan);
+    document.getElementById('pularBtn').addEventListener('click', closePlan);
+    document.getElementById('enviarPalpiteBtn').addEventListener('click', () => {
+      const guess = document.getElementById('mysteryGuess').value.trim();
+      sendToEmail('Palpite do presente misterioso', {
+        nome: visitorName,
+        plano: p.name,
+        palpite: guess || '(não escreveu um palpite)'
+      });
+      showMysteryThanks();
+    });
   }, 500);
 }
 
@@ -439,10 +490,12 @@ function burstConfetti(){
 
 /* ---------------- Quiz "Montar Meu Rolê" ---------------- */
 const QUIZ = [
-  { q:'Qual é o melhor dia?', key:'day', placeholder:'Ex: sábado' },
-  { q:'Qual é o melhor horário?', key:'time', placeholder:'Ex: 19h00' },
-  { q:'Aonde você pretende ir?', key:'place', placeholder:'Ex: praia, shopping, parque...' },
-  { q:'Qual tipo de comida você quer?', key:'food', placeholder:'Ex: pizza, sushi...' },
+  { q:'📍 Qual seria o lugar perfeito para nosso encontro?', key:'place', placeholder:'Ex: praia, cinema, cafeteria, parque, restaurante, shopping...' },
+  { q:'🕒 Qual horário você mais gosta para um date?', key:'time', placeholder:'Ex: manhã, tarde, pôr do sol ou noite' },
+  { q:'🍽️ O que você gostaria de comer?', key:'food', placeholder:'Ex: pizza, sushi, hambúrguer, churrasco, sobremesa...' },
+  { q:'🎶 Qual é o clima que você imagina?', key:'mood', placeholder:'Ex: romântico, divertido, tranquilo, aventura...' },
+  { q:'💰 Você prefere um encontro simples ou algo mais elaborado?', key:'style', placeholder:'Ex: simples e aconchegante, tanto faz, ou diferente' },
+  { q:'✨ Tem alguma coisa que faria esse encontro ficar inesquecível?', key:'special', placeholder:'Ex: uma surpresa, flores, música, ver o pôr do sol...' },
 ];
 let quizStep = 0;
 let quizAnswers = {};
@@ -489,10 +542,12 @@ function renderQuizResult(){
   const compat = 90 + Math.floor(Math.random()*10);
   sendToEmail('Rolê montado pelo quiz', {
     nome: visitorName,
-    dia: quizAnswers.day,
-    horario: quizAnswers.time,
     lugar: quizAnswers.place,
+    horario: quizAnswers.time,
     comida: quizAnswers.food,
+    clima: quizAnswers.mood,
+    estilo: quizAnswers.style,
+    especial: quizAnswers.special,
     compatibilidade: compat + '%'
   });
 
@@ -502,19 +557,51 @@ function renderQuizResult(){
       <div class="result-title">Seu Rolê Ideal</div>
       <div class="result-compat">⭐ Compatibilidade: ${compat}%</div>
       <div class="result-rows">
-        <div><span>📅 Dia</span><b>${quizAnswers.day}</b></div>
-        <div><span>🕔 Horário</span><b>${quizAnswers.time}</b></div>
         <div><span>📍 Lugar</span><b>${quizAnswers.place}</b></div>
+        <div><span>🕒 Horário</span><b>${quizAnswers.time}</b></div>
         <div><span>🍽️ Comida</span><b>${quizAnswers.food}</b></div>
+        <div><span>🎶 Clima</span><b>${quizAnswers.mood}</b></div>
+        <div><span>💰 Estilo</span><b>${quizAnswers.style}</b></div>
+        <div><span>✨ Especial</span><b>${quizAnswers.special}</b></div>
+      </div>
+      <div class="mystery-box">
+        <div class="mystery-title">🎁 Presente misterioso</div>
+        <p>Você vai ganhar um presente misterioso no nosso encontro! Só na hora você vai descobrir o que é 😉</p>
+        <textarea class="quiz-input mystery-textarea" id="mysteryGuessQuiz" placeholder="O que você acha que pode ser?"></textarea>
       </div>
       <div class="modal-actions">
-        <button class="btn-ghost" id="refazerBtn">Refazer</button>
-        <button class="btn-primary" id="fecharQuizBtn">Fechar</button>
+        <button class="btn-ghost" id="pularQuizBtn">Pular</button>
+        <button class="btn-primary" id="enviarPalpiteQuizBtn">Enviar palpite ❤️</button>
       </div>
     </div>
   `;
-  document.getElementById('refazerBtn').addEventListener('click', () => { quizStep=0; quizAnswers={}; renderQuizStep(); });
-  document.getElementById('fecharQuizBtn').addEventListener('click', () => quizOverlay.classList.remove('show'));
+  document.getElementById('pularQuizBtn').addEventListener('click', () => quizOverlay.classList.remove('show'));
+  document.getElementById('enviarPalpiteQuizBtn').addEventListener('click', () => {
+    const guess = document.getElementById('mysteryGuessQuiz').value.trim();
+    sendToEmail('Palpite do presente misterioso', {
+      nome: visitorName,
+      origem: 'Montar Meu Rolê',
+      palpite: guess || '(não escreveu um palpite)'
+    });
+    showMysteryThanks(true);
+  });
+}
+
+function showMysteryThanks(isQuiz){
+  const modalEl = isQuiz ? quizModal : planModal;
+  modalEl.innerHTML = `
+    <div class="success-wrap">
+      <div style="font-size:40px;">💌</div>
+      <h3>Palpite recebido!</h3>
+      <p>Guardadinho com carinho até o dia do encontro 🖤</p>
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn-primary" id="fecharFinalBtn" style="width:100%;">Fechar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('fecharFinalBtn').addEventListener('click', () => {
+    if(isQuiz){ quizOverlay.classList.remove('show'); } else { closePlan(); }
+  });
 }
 
 /* ---------------- Particles background ---------------- */
@@ -605,6 +692,71 @@ musicBtn.addEventListener('click', () => {
     pendingPlay = false;
   }
 });
+
+/* ---------------- Galeria de fotos ---------------- */
+let encounterHistory = [];
+let galleryPhotos = [];
+const photoOverlay = document.getElementById('photoOverlay');
+const photoModal = document.getElementById('photoModal');
+
+function readFileAsDataURL(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function openPhotoModal(){
+  const hasHistory = encounterHistory.length > 0;
+  photoModal.innerHTML = `
+    <div class="modal-title">📸 Adicionar foto</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:14px;">Escolha a foto e o encontro dela:</div>
+    <input type="file" accept="image/*" id="photoFileInput" class="quiz-input" style="padding:10px; margin-bottom:12px;">
+    ${hasHistory
+      ? `<select id="photoEncounterSelect" class="quiz-input" style="margin-bottom:12px;">
+           ${encounterHistory.map((e,i) => `<option value="${i}">${e.label}</option>`).join('')}
+         </select>`
+      : `<input type="text" id="photoDateInput" class="quiz-input" placeholder="Data do encontro (ex: sábado, 19h)" style="margin-bottom:12px;">`
+    }
+    <div class="modal-actions">
+      <button class="btn-ghost" id="fecharPhotoBtn">Cancelar</button>
+      <button class="btn-primary" id="salvarPhotoBtn">Adicionar</button>
+    </div>
+  `;
+  photoOverlay.classList.add('show');
+  document.getElementById('fecharPhotoBtn').addEventListener('click', () => photoOverlay.classList.remove('show'));
+  document.getElementById('salvarPhotoBtn').addEventListener('click', async () => {
+    const fileInput = document.getElementById('photoFileInput');
+    if(!fileInput.files || !fileInput.files[0]){ fileInput.style.borderColor = 'var(--accent)'; return; }
+    const dataUrl = await readFileAsDataURL(fileInput.files[0]);
+    const label = hasHistory
+      ? encounterHistory[document.getElementById('photoEncounterSelect').value].label
+      : (document.getElementById('photoDateInput').value.trim() || 'Data não informada');
+    galleryPhotos.unshift({ src: dataUrl, label });
+    renderGallery();
+    photoOverlay.classList.remove('show');
+  });
+}
+
+function renderGallery(){
+  const grid = document.getElementById('galleryGrid');
+  if(!galleryPhotos.length){
+    grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:var(--muted); padding:30px 0; font-size:14px;">Nenhuma foto ainda. As fotos dos nossos encontros vão aparecer aqui 💕</div>`;
+    return;
+  }
+  grid.innerHTML = galleryPhotos.map(ph => `
+    <div class="gallery-item">
+      <img src="${ph.src}" alt="Foto do encontro">
+      <div class="gallery-caption">📅 ${ph.label}</div>
+    </div>
+  `).join('');
+}
+
+document.getElementById('addPhotoBtn').addEventListener('click', openPhotoModal);
+photoOverlay.addEventListener('click', (e) => { if(e.target === photoOverlay) photoOverlay.classList.remove('show'); });
+renderGallery();
 </script>
 </body>
 </html>
