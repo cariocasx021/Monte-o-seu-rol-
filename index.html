@@ -765,8 +765,21 @@ function setLastEncounter(planName, dateStr, timeStr){
     dayLabel: dateStr ? new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR') : 'a combinar',
     timeLabel: timeStr || 'a combinar'
   };
+  try{
+    localStorage.setItem('victorExp_lastEncounter', JSON.stringify({ planName, dateStr, timeStr }));
+  }catch(e){ /* localStorage indisponível (ex: preview do chat) — segue sem salvar */ }
   startCountdown();
   updateFeedbackSection();
+}
+
+function loadLastEncounter(){
+  try{
+    const saved = localStorage.getItem('victorExp_lastEncounter');
+    if(saved){
+      const { planName, dateStr, timeStr } = JSON.parse(saved);
+      setLastEncounter(planName, dateStr, timeStr);
+    }
+  }catch(e){ /* localStorage indisponível — segue sem carregar */ }
 }
 
 function startCountdown(){
@@ -835,6 +848,7 @@ document.getElementById('enviarFeedbackBtn').addEventListener('click', () => {
     `<p style="text-align:center; color:var(--gold); font-size:14.5px;">💌 Obrigado pelo feedback!</p>`;
 });
 
+loadLastEncounter();
 </script>
 </body>
 </html>
