@@ -168,11 +168,6 @@
   .stars-input span{ transition: color .15s ease; }
   .stars-input span.filled{ color: var(--gold); }
 
-  .capsule-entry{ margin-bottom:16px; }
-  .capsule-entry:last-child{ margin-bottom:0; }
-  .capsule-who{ font-weight:700; font-size:13.5px; color:var(--gold); margin-bottom:6px; }
-  .capsule-entry p{ font-size:14px; color:#e6dee2; line-height:1.6; margin:0; }
-
   .contract-box{ display:flex; flex-direction:column; gap:14px; margin-bottom:20px; }
   .contract-item{
     display:flex; align-items:center; gap:10px; font-size:14.5px; cursor:pointer;
@@ -227,14 +222,19 @@
 </head>
 <body>
 
-<div class="overlay show" id="nameGate" style="z-index:300;">
+<div class="overlay show" id="authGate" style="z-index:300;">
   <div class="modal">
-    <div class="modal-title">🖤 Antes de começar...</div>
-    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Como você se chama?</div>
-    <input type="text" class="quiz-input" id="nameInput" placeholder="Seu nome" autocomplete="off" style="margin-bottom:10px;">
-    <input type="password" class="quiz-input" id="victorPinInput" placeholder="PIN do Victor (deixe em branco se não for você)" autocomplete="off" style="margin-bottom:18px; font-size:13px;">
+    <div class="modal-title" id="authTitle">🖤 Entrar</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;" id="authSubtitle">Entre com seu e-mail e senha</div>
+    <input type="text" class="quiz-input" id="authNameInput" placeholder="Seu nome" autocomplete="off" style="margin-bottom:10px; display:none;">
+    <input type="email" class="quiz-input" id="authEmailInput" placeholder="E-mail" autocomplete="off" style="margin-bottom:10px;">
+    <input type="password" class="quiz-input" id="authPasswordInput" placeholder="Senha" autocomplete="off" style="margin-bottom:6px;">
+    <div id="authError" style="color:var(--accent); font-size:12.5px; min-height:16px; margin-bottom:10px;"></div>
     <div class="modal-actions">
-      <button class="btn-primary" id="nameSubmitBtn" style="width:100%;">Entrar ❤️</button>
+      <button class="btn-primary" id="authSubmitBtn" style="width:100%;">Entrar ❤️</button>
+    </div>
+    <div style="text-align:center; margin-top:14px;">
+      <button class="btn-ghost" id="authToggleBtn" style="font-size:12.5px;">Não tem conta? Criar conta</button>
     </div>
   </div>
 </div>
@@ -243,7 +243,16 @@
 
 <div class="topbar">
   <span class="home-pill">🖤 Página inicial</span>
-  <button class="music-btn" id="musicBtn" title="Música ambiente">🎵</button>
+  <div style="display:flex; gap:8px;">
+    <button class="music-btn" id="profileBtn" title="Meu perfil">👤</button>
+    <button class="music-btn" id="musicBtn" title="Música ambiente">🎵</button>
+    <button class="music-btn" id="logoutBtn" title="Sair">🚪</button>
+  </div>
+</div>
+
+<!-- Profile modal -->
+<div class="overlay" id="profileOverlay">
+  <div class="modal" id="profileModal"></div>
 </div>
 
 <section class="hero">
@@ -292,14 +301,6 @@
   </div>
 </section>
 
-<section class="section" id="capsula">
-  <div class="section-head">
-    <div class="eyebrow">💞 Cápsula do Tempo</div>
-    <h2>Como você imagina nosso encontro?</h2>
-  </div>
-  <div class="feedback-box" id="capsuleBox"></div>
-</section>
-
 <footer>Victor Experience™ — feito com 🖤 pra momentos que valem a pena.</footer>
 
 <div id="ytPlayer" style="position:fixed; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;"></div>
@@ -317,6 +318,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAgYr1x8pZfm7XdTwDFGbn04FAAj9ImGFk",
@@ -328,38 +330,137 @@ const firebaseConfig = {
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
+const auth = getAuth(firebaseApp);
 const sharedDocRef = doc(db, "victorExperience", "shared");
-/* ---------------- Nome da visitante ---------------- */
-const VICTOR_PIN = 'victor143';
+/* ---------------- Login / Cadastro ---------------- */
 let visitorName = '';
-let visitorRole = 'guest'; // 'guest' (ela) ou 'victor'
-const nameGate = document.getElementById('nameGate');
-const nameInput = document.getElementById('nameInput');
-const victorPinInput = document.getElementById('victorPinInput');
-nameInput.focus();
+let currentUid = null;
+let authMode = 'login'; // 'login' ou 'signup'
 
-function submitName(){
-  const val = nameInput.value.trim();
-  if(!val){ nameInput.style.borderColor = 'var(--accent)'; nameInput.focus(); return; }
-  const pin = victorPinInput.value.trim();
-  if(pin){
-    if(pin !== VICTOR_PIN){
-      victorPinInput.style.borderColor = 'var(--accent)';
-      victorPinInput.focus();
-      return;
-    }
-    visitorRole = 'victor';
+const authGate = document.getElementById('authGate');
+const authTitle = document.getElementById('authTitle');
+const authSubtitle = document.getElementById('authSubtitle');
+const authNameInput = document.getElementById('authNameInput');
+const authEmailInput = document.getElementById('authEmailInput');
+const authPasswordInput = document.getElementById('authPasswordInput');
+const authError = document.getElementById('authError');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const authToggleBtn = document.getElementById('authToggleBtn');
+
+function setAuthMode(mode){
+  authMode = mode;
+  authError.textContent = '';
+  if(mode === 'signup'){
+    authTitle.textContent = '🖤 Criar conta';
+    authSubtitle.textContent = 'Cria sua conta pra entrar';
+    authNameInput.style.display = 'block';
+    authSubmitBtn.textContent = 'Criar conta ❤️';
+    authToggleBtn.textContent = 'Já tem conta? Entrar';
   } else {
-    visitorRole = 'guest';
+    authTitle.textContent = '🖤 Entrar';
+    authSubtitle.textContent = 'Entre com seu e-mail e senha';
+    authNameInput.style.display = 'none';
+    authSubmitBtn.textContent = 'Entrar ❤️';
+    authToggleBtn.textContent = 'Não tem conta? Criar conta';
   }
-  visitorName = val;
-  nameGate.classList.remove('show');
-  const tagline = document.querySelector('.tagline');
-  if(tagline) tagline.textContent = 'Oi, ' + visitorName + '! Experiências inesquecíveis.';
 }
-document.getElementById('nameSubmitBtn').addEventListener('click', submitName);
-nameInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') submitName(); });
-victorPinInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') submitName(); });
+authToggleBtn.addEventListener('click', () => setAuthMode(authMode === 'login' ? 'signup' : 'login'));
+
+function authErrorMessage(err){
+  const code = err && err.code;
+  if(code === 'auth/email-already-in-use') return 'Esse e-mail já está cadastrado.';
+  if(code === 'auth/invalid-email') return 'E-mail inválido.';
+  if(code === 'auth/weak-password') return 'A senha precisa ter pelo menos 6 caracteres.';
+  if(code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'E-mail ou senha incorretos.';
+  return 'Algo deu errado. Tenta de novo.';
+}
+
+async function submitAuth(){
+  const email = authEmailInput.value.trim();
+  const password = authPasswordInput.value;
+  authError.textContent = '';
+  if(!email || !password){
+    authError.textContent = 'Preenche e-mail e senha.';
+    return;
+  }
+  authSubmitBtn.disabled = true;
+  try{
+    if(authMode === 'signup'){
+      const name = authNameInput.value.trim();
+      if(!name){ authError.textContent = 'Digita seu nome.'; authSubmitBtn.disabled = false; return; }
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      await setDoc(doc(db, 'users', cred.user.uid), { name, bio: '', createdAt: Date.now() });
+    } else {
+      await signInWithEmailAndPassword(auth, email, password);
+    }
+  }catch(e){
+    authError.textContent = authErrorMessage(e);
+  }
+  authSubmitBtn.disabled = false;
+}
+authSubmitBtn.addEventListener('click', submitAuth);
+[authEmailInput, authPasswordInput, authNameInput].forEach(inp => {
+  inp.addEventListener('keydown', (e) => { if(e.key === 'Enter') submitAuth(); });
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+
+onAuthStateChanged(auth, async (user) => {
+  if(user){
+    currentUid = user.uid;
+    let profileSnap = await getDoc(doc(db, 'users', user.uid));
+    if(!profileSnap.exists()){
+      await setDoc(doc(db, 'users', user.uid), { name: 'Sem nome', bio: '', createdAt: Date.now() });
+      profileSnap = await getDoc(doc(db, 'users', user.uid));
+    }
+    const profile = profileSnap.data();
+    visitorName = profile.name || 'Sem nome';
+    authGate.classList.remove('show');
+    const tagline = document.querySelector('.tagline');
+    if(tagline) tagline.textContent = 'Oi, ' + visitorName + '! Experiências inesquecíveis.';
+  } else {
+    currentUid = null;
+    visitorName = '';
+    authGate.classList.add('show');
+    authEmailInput.value = '';
+    authPasswordInput.value = '';
+    authNameInput.value = '';
+  }
+});
+
+/* ---------------- Meu Perfil ---------------- */
+const profileOverlay = document.getElementById('profileOverlay');
+const profileModal = document.getElementById('profileModal');
+
+async function openProfileModal(){
+  if(!currentUid) return;
+  const snap = await getDoc(doc(db, 'users', currentUid));
+  const profile = snap.data() || { name: visitorName, bio: '' };
+  profileModal.innerHTML = `
+    <div class="modal-title">👤 Meu Perfil</div>
+    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Nome</div>
+    <input type="text" class="quiz-input" id="profileNameInput" value="${profile.name || ''}" style="margin-bottom:14px;">
+    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Bio</div>
+    <textarea class="quiz-input mystery-textarea" id="profileBioInput" placeholder="Conta um pouco sobre você...">${profile.bio || ''}</textarea>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-ghost" id="fecharProfileBtn">Fechar</button>
+      <button class="btn-primary" id="salvarProfileBtn">Salvar</button>
+    </div>
+  `;
+  profileOverlay.classList.add('show');
+  document.getElementById('fecharProfileBtn').addEventListener('click', () => profileOverlay.classList.remove('show'));
+  document.getElementById('salvarProfileBtn').addEventListener('click', async () => {
+    const name = document.getElementById('profileNameInput').value.trim() || 'Sem nome';
+    const bio = document.getElementById('profileBioInput').value.trim();
+    await setDoc(doc(db, 'users', currentUid), { name, bio, createdAt: profile.createdAt || Date.now() });
+    visitorName = name;
+    const tagline = document.querySelector('.tagline');
+    if(tagline) tagline.textContent = 'Oi, ' + visitorName + '! Experiências inesquecíveis.';
+    profileOverlay.classList.remove('show');
+  });
+}
+document.getElementById('profileBtn').addEventListener('click', openProfileModal);
+profileOverlay.addEventListener('click', (e) => { if(e.target === profileOverlay) profileOverlay.classList.remove('show'); });
 
 /* ---------------- Plans data ---------------- */
 const PLANS = [
@@ -880,86 +981,13 @@ document.getElementById('enviarFeedbackBtn').addEventListener('click', () => {
     `<p style="text-align:center; color:var(--gold); font-size:14.5px;">💌 Obrigado pelo feedback!</p>`;
 });
 
-/* ---------------- Cápsula do Tempo ---------------- */
-let capsuleData = { her: '', victor: '' };
-
-function getCapsuleRevealTime(dateObj){
-  const d = new Date(dateObj);
-  d.setDate(d.getDate() + 1);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-async function persistCapsule(){
-  try{
-    await setDoc(sharedDocRef, { capsule: { her: capsuleData.her, victor: capsuleData.victor } }, { merge: true });
-  }catch(e){ console.warn('Firestore: falha ao salvar a cápsula', e); }
-}
-
-function renderCapsule(){
-  const box = document.getElementById('capsuleBox');
-  if(!lastEncounter || !lastEncounter.dateObj){
-    box.innerHTML = `<p style="color:var(--muted); font-size:14px; margin:0;">Reserve um encontro com data e horário pra abrir a cápsula do tempo 🖤</p>`;
-    return;
-  }
-
-  const revealTime = getCapsuleRevealTime(lastEncounter.dateObj);
-  const unlocked = Date.now() >= revealTime.getTime();
-
-  if(unlocked){
-    box.innerHTML = `
-      <div class="capsule-entry">
-        <div class="capsule-who">💌 Ela imaginou:</div>
-        <p>${capsuleData.her || '(não escreveu nada)'}</p>
-      </div>
-      <div class="capsule-entry">
-        <div class="capsule-who">💌 Victor imaginou:</div>
-        <p>${capsuleData.victor || '(não escreveu nada)'}</p>
-      </div>
-    `;
-    return;
-  }
-
-  const lockedNote = `<p style="color:var(--muted); font-size:13px; margin:0 0 16px;">🔒 A cápsula abre em ${revealTime.toLocaleDateString('pt-BR')}, à meia-noite.</p>`;
-
-  if(visitorRole === 'victor'){
-    box.innerHTML = `
-      ${lockedNote}
-      <textarea class="quiz-input mystery-textarea" id="capsuleVictorInput" placeholder="Escreve aqui...">${capsuleData.victor || ''}</textarea>
-      <button class="btn-primary" id="saveCapsuleVictorBtn" style="width:100%; margin-top:10px;">${capsuleData.victor ? 'Atualizar' : 'Guardar'} minha parte</button>
-      <p style="color:var(--muted); font-size:12px; margin-top:14px; text-align:center;">A parte dela fica escondida até a cápsula abrir 🖤</p>
-    `;
-    document.getElementById('saveCapsuleVictorBtn').addEventListener('click', () => {
-      capsuleData.victor = document.getElementById('capsuleVictorInput').value.trim();
-      persistCapsule();
-      renderCapsule();
-    });
-  } else {
-    box.innerHTML = `
-      ${lockedNote}
-      <textarea class="quiz-input mystery-textarea" id="capsuleHerInput" placeholder="Escreve aqui...">${capsuleData.her || ''}</textarea>
-      <button class="btn-primary" id="saveCapsuleHerBtn" style="width:100%; margin-top:10px;">${capsuleData.her ? 'Atualizar' : 'Guardar'} minha parte</button>
-      <p style="color:var(--muted); font-size:12px; margin-top:14px; text-align:center;">A parte do Victor fica escondida até a cápsula abrir 🖤</p>
-    `;
-    document.getElementById('saveCapsuleHerBtn').addEventListener('click', () => {
-      capsuleData.her = document.getElementById('capsuleHerInput').value.trim();
-      persistCapsule();
-      renderCapsule();
-    });
-  }
-}
 onSnapshot(sharedDocRef, (snap) => {
   const data = snap.data() || {};
   lastEncounter = data.lastEncounter
     ? buildEncounterFromRaw(data.lastEncounter.planName, data.lastEncounter.dateStr, data.lastEncounter.timeStr)
     : null;
-  capsuleData = {
-    her: (data.capsule && data.capsule.her) || '',
-    victor: (data.capsule && data.capsule.victor) || ''
-  };
   startCountdown();
   updateFeedbackSection();
-  renderCapsule();
 }, (err) => {
   console.warn('Firestore: falha ao escutar mudanças', err);
 });
