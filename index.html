@@ -231,7 +231,8 @@
   <div class="modal">
     <div class="modal-title">🖤 Antes de começar...</div>
     <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Como você se chama?</div>
-    <input type="text" class="quiz-input" id="nameInput" placeholder="Seu nome" autocomplete="off" style="margin-bottom:18px;">
+    <input type="text" class="quiz-input" id="nameInput" placeholder="Seu nome" autocomplete="off" style="margin-bottom:10px;">
+    <input type="password" class="quiz-input" id="victorPinInput" placeholder="PIN do Victor (deixe em branco se não for você)" autocomplete="off" style="margin-bottom:18px; font-size:13px;">
     <div class="modal-actions">
       <button class="btn-primary" id="nameSubmitBtn" style="width:100%;">Entrar ❤️</button>
     </div>
@@ -313,11 +314,6 @@
   <div class="modal" id="quizModal"></div>
 </div>
 
-<!-- Victor capsule modal -->
-<div class="overlay" id="capsuleOverlay">
-  <div class="modal" id="capsuleModal"></div>
-</div>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -334,14 +330,28 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 const sharedDocRef = doc(db, "victorExperience", "shared");
 /* ---------------- Nome da visitante ---------------- */
+const VICTOR_PIN = 'victor143';
 let visitorName = '';
+let visitorRole = 'guest'; // 'guest' (ela) ou 'victor'
 const nameGate = document.getElementById('nameGate');
 const nameInput = document.getElementById('nameInput');
+const victorPinInput = document.getElementById('victorPinInput');
 nameInput.focus();
 
 function submitName(){
   const val = nameInput.value.trim();
   if(!val){ nameInput.style.borderColor = 'var(--accent)'; nameInput.focus(); return; }
+  const pin = victorPinInput.value.trim();
+  if(pin){
+    if(pin !== VICTOR_PIN){
+      victorPinInput.style.borderColor = 'var(--accent)';
+      victorPinInput.focus();
+      return;
+    }
+    visitorRole = 'victor';
+  } else {
+    visitorRole = 'guest';
+  }
   visitorName = val;
   nameGate.classList.remove('show');
   const tagline = document.querySelector('.tagline');
@@ -349,6 +359,7 @@ function submitName(){
 }
 document.getElementById('nameSubmitBtn').addEventListener('click', submitName);
 nameInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') submitName(); });
+victorPinInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') submitName(); });
 
 /* ---------------- Plans data ---------------- */
 const PLANS = [
@@ -871,8 +882,6 @@ document.getElementById('enviarFeedbackBtn').addEventListener('click', () => {
 
 /* ---------------- Cápsula do Tempo ---------------- */
 let capsuleData = { her: '', victor: '' };
-const capsuleOverlay = document.getElementById('capsuleOverlay');
-const capsuleModal = document.getElementById('capsuleModal');
 
 function getCapsuleRevealTime(dateObj){
   const d = new Date(dateObj);
@@ -911,42 +920,34 @@ function renderCapsule(){
     return;
   }
 
-  box.innerHTML = `
-    <p style="color:var(--muted); font-size:13px; margin:0 0 16px;">🔒 A cápsula abre em ${revealTime.toLocaleDateString('pt-BR')}, à meia-noite.</p>
-    <textarea class="quiz-input mystery-textarea" id="capsuleHerInput" placeholder="Escreve aqui...">${capsuleData.her || ''}</textarea>
-    <button class="btn-primary" id="saveCapsuleHerBtn" style="width:100%; margin-top:10px;">${capsuleData.her ? 'Atualizar' : 'Guardar'} minha parte</button>
-    <div style="text-align:center; margin-top:16px;">
-      <button class="btn-ghost" id="victorAreaBtn" style="font-size:12.5px;">✍️ Área do Victor</button>
-    </div>
-  `;
-  document.getElementById('saveCapsuleHerBtn').addEventListener('click', () => {
-    capsuleData.her = document.getElementById('capsuleHerInput').value.trim();
-    persistCapsule();
-    renderCapsule();
-  });
-  document.getElementById('victorAreaBtn').addEventListener('click', openVictorCapsuleModal);
-}
+  const lockedNote = `<p style="color:var(--muted); font-size:13px; margin:0 0 16px;">🔒 A cápsula abre em ${revealTime.toLocaleDateString('pt-BR')}, à meia-noite.</p>`;
 
-function openVictorCapsuleModal(){
-  capsuleModal.innerHTML = `
-    <div class="modal-title">✍️ Área do Victor</div>
-    <div style="color:var(--muted); font-size:13px; margin-bottom:14px;">Como você imagina o encontro? (fica escondido até a data passar)</div>
-    <textarea class="quiz-input mystery-textarea" id="capsuleVictorInput" placeholder="Escreve aqui...">${capsuleData.victor || ''}</textarea>
-    <div class="modal-actions" style="margin-top:14px;">
-      <button class="btn-ghost" id="fecharCapsuleBtn">Fechar</button>
-      <button class="btn-primary" id="saveCapsuleVictorBtn">${capsuleData.victor ? 'Atualizar' : 'Guardar'}</button>
-    </div>
-  `;
-  capsuleOverlay.classList.add('show');
-  document.getElementById('fecharCapsuleBtn').addEventListener('click', () => capsuleOverlay.classList.remove('show'));
-  document.getElementById('saveCapsuleVictorBtn').addEventListener('click', () => {
-    capsuleData.victor = document.getElementById('capsuleVictorInput').value.trim();
-    persistCapsule();
-    capsuleOverlay.classList.remove('show');
-  });
+  if(visitorRole === 'victor'){
+    box.innerHTML = `
+      ${lockedNote}
+      <textarea class="quiz-input mystery-textarea" id="capsuleVictorInput" placeholder="Escreve aqui...">${capsuleData.victor || ''}</textarea>
+      <button class="btn-primary" id="saveCapsuleVictorBtn" style="width:100%; margin-top:10px;">${capsuleData.victor ? 'Atualizar' : 'Guardar'} minha parte</button>
+      <p style="color:var(--muted); font-size:12px; margin-top:14px; text-align:center;">A parte dela fica escondida até a cápsula abrir 🖤</p>
+    `;
+    document.getElementById('saveCapsuleVictorBtn').addEventListener('click', () => {
+      capsuleData.victor = document.getElementById('capsuleVictorInput').value.trim();
+      persistCapsule();
+      renderCapsule();
+    });
+  } else {
+    box.innerHTML = `
+      ${lockedNote}
+      <textarea class="quiz-input mystery-textarea" id="capsuleHerInput" placeholder="Escreve aqui...">${capsuleData.her || ''}</textarea>
+      <button class="btn-primary" id="saveCapsuleHerBtn" style="width:100%; margin-top:10px;">${capsuleData.her ? 'Atualizar' : 'Guardar'} minha parte</button>
+      <p style="color:var(--muted); font-size:12px; margin-top:14px; text-align:center;">A parte do Victor fica escondida até a cápsula abrir 🖤</p>
+    `;
+    document.getElementById('saveCapsuleHerBtn').addEventListener('click', () => {
+      capsuleData.her = document.getElementById('capsuleHerInput').value.trim();
+      persistCapsule();
+      renderCapsule();
+    });
+  }
 }
-capsuleOverlay.addEventListener('click', (e) => { if(e.target === capsuleOverlay) capsuleOverlay.classList.remove('show'); });
-
 onSnapshot(sharedDocRef, (snap) => {
   const data = snap.data() || {};
   lastEncounter = data.lastEncounter
