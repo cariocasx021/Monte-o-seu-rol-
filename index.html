@@ -262,6 +262,26 @@
   <button class="cta" id="ctaPlanos">Conheça nossos planos</button>
 </section>
 
+<section class="section" id="pessoas">
+  <div class="section-head">
+    <div class="eyebrow">🔍 Comunidade</div>
+    <h2>Encontrar Pessoas</h2>
+  </div>
+  <div style="display:flex; gap:10px; margin-bottom:20px;">
+    <input type="text" class="quiz-input" id="searchUserInput" placeholder="Buscar por nome...">
+    <button class="btn-primary" id="searchUserBtn" style="white-space:nowrap; width:auto; padding:0 18px;">Buscar</button>
+  </div>
+  <div id="searchResults"></div>
+</section>
+
+<section class="section" id="notificacoes">
+  <div class="section-head">
+    <div class="eyebrow">🔔 Notificações</div>
+    <h2>Quem começou a te seguir</h2>
+  </div>
+  <div id="notificationsList"></div>
+</section>
+
 <section class="section" id="planos">
   <div class="section-head">
     <div class="eyebrow">📦 Catálogo</div>
@@ -317,7 +337,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, getDocs, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -389,7 +409,7 @@ async function submitAuth(){
       const name = authNameInput.value.trim();
       if(!name){ authError.textContent = 'Digita seu nome.'; authSubmitBtn.disabled = false; return; }
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await setDoc(doc(db, 'users', cred.user.uid), { name, bio: '', createdAt: Date.now() });
+      await setDoc(doc(db, 'users', cred.user.uid), { name, nickname: '', bio: '', photo: '', following: [], followers: [], nameChangedAt: Date.now(), createdAt: Date.now() });
     } else {
       await signInWithEmailAndPassword(auth, email, password);
     }
@@ -405,12 +425,52 @@ authSubmitBtn.addEventListener('click', submitAuth);
 
 document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
 
+let myProfileUnsub = null;
+
+function renderNotifications(profileData){
+  const box = document.getElementById('notificationsList');
+  if(!box) return;
+  const followers = (profileData && profileData.followers) || [];
+  const following = (profileData && profileData.following) || [];
+  const followingIds = following.map(f => f.uid);
+
+  if(!followers.length){
+    box.innerHTML = `<p style="color:var(--muted); font-size:13px;">Ninguém começou a te seguir ainda.</p>`;
+    return;
+  }
+
+  box.innerHTML = followers.slice().reverse().map(f => `
+    <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;">👤</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:14px;">${f.name}</div>
+        <div style="color:var(--muted); font-size:12px;">começou a te seguir</div>
+      </div>
+      ${followingIds.includes(f.uid)
+        ? `<span style="color:var(--muted); font-size:12px; flex-shrink:0;">✓ Segue de volta</span>`
+        : `<button class="btn-primary follow-back-btn" data-uid="${f.uid}" data-name="${f.name}" style="padding:8px 14px; font-size:12.5px; width:auto; flex-shrink:0;">Seguir de volta</button>`
+      }
+    </div>
+  `).join('');
+
+  box.querySelectorAll('.follow-back-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const uid = btn.dataset.uid;
+      const name = btn.dataset.name;
+      btn.disabled = true;
+      await updateDoc(doc(db, 'users', currentUid), { following: arrayUnion({ uid, name }) });
+      await updateDoc(doc(db, 'users', uid), { followers: arrayUnion({ uid: currentUid, name: visitorName }) });
+      btn.outerHTML = `<span style="color:var(--muted); font-size:12px;">✓ Segue de volta</span>`;
+    });
+  });
+}
+
 onAuthStateChanged(auth, async (user) => {
   if(user){
     currentUid = user.uid;
     let profileSnap = await getDoc(doc(db, 'users', user.uid));
     if(!profileSnap.exists()){
-      await setDoc(doc(db, 'users', user.uid), { name: 'Sem nome', bio: '', createdAt: Date.now() });
+      await setDoc(doc(db, 'users', user.uid), { name: 'Sem nome', nickname: '', bio: '', photo: '', following: [], followers: [], nameChangedAt: Date.now(), createdAt: Date.now() });
       profileSnap = await getDoc(doc(db, 'users', user.uid));
     }
     const profile = profileSnap.data();
@@ -418,6 +478,11 @@ onAuthStateChanged(auth, async (user) => {
     authGate.classList.remove('show');
     const tagline = document.querySelector('.tagline');
     if(tagline) tagline.textContent = 'Oi, ' + visitorName + '! Experiências inesquecíveis.';
+
+    if(myProfileUnsub) myProfileUnsub();
+    myProfileUnsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+      if(snap.exists()) renderNotifications(snap.data());
+    });
   } else {
     currentUid = null;
     visitorName = '';
@@ -425,6 +490,9 @@ onAuthStateChanged(auth, async (user) => {
     authEmailInput.value = '';
     authPasswordInput.value = '';
     authNameInput.value = '';
+    if(myProfileUnsub){ myProfileUnsub(); myProfileUnsub = null; }
+    const box = document.getElementById('notificationsList');
+    if(box) box.innerHTML = '';
   }
 });
 
@@ -432,28 +500,103 @@ onAuthStateChanged(auth, async (user) => {
 const profileOverlay = document.getElementById('profileOverlay');
 const profileModal = document.getElementById('profileModal');
 
+function compressImageToDataUrl(file, maxSize){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > height){ if(width > maxSize){ height *= maxSize / width; width = maxSize; } }
+        else { if(height > maxSize){ width *= maxSize / height; height = maxSize; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 async function openProfileModal(){
   if(!currentUid) return;
   const snap = await getDoc(doc(db, 'users', currentUid));
-  const profile = snap.data() || { name: visitorName, bio: '' };
+  const profile = snap.data() || { name: visitorName, bio: '', photo: '', following: [], followers: [], nameChangedAt: Date.now() };
+  let pendingPhoto = profile.photo || '';
+
+  const followingCount = (profile.following || []).length;
+  const followersCount = (profile.followers || []).length;
+
+  const daysSinceChange = Math.floor((Date.now() - (profile.nameChangedAt || 0)) / 86400000);
+  const daysLeft = Math.max(0, 30 - daysSinceChange);
+  const nameLocked = daysLeft > 0;
+
   profileModal.innerHTML = `
     <div class="modal-title">👤 Meu Perfil</div>
-    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Nome</div>
-    <input type="text" class="quiz-input" id="profileNameInput" value="${profile.name || ''}" style="margin-bottom:14px;">
+    <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px;">
+      <img id="profilePhotoPreview" src="${pendingPhoto}" style="width:60px; height:60px; border-radius:50%; object-fit:cover; background:rgba(255,255,255,0.08); ${pendingPhoto ? '' : 'display:none;'}">
+      <input type="file" accept="image/*" id="profilePhotoInput" style="font-size:12px; color:var(--muted);">
+    </div>
+    <div style="display:flex; gap:18px; font-size:13px; color:var(--muted); margin-bottom:16px;">
+      <span><b style="color:var(--text);">${followersCount}</b> seguidores</span>
+      <span><b style="color:var(--text);">${followingCount}</b> seguindo</span>
+    </div>
+    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Nome ${nameLocked ? `(pode mudar em ${daysLeft} dia${daysLeft === 1 ? '' : 's'})` : ''}</div>
+    <input type="text" class="quiz-input" id="profileNameInput" value="${profile.name || ''}" style="margin-bottom:14px;" ${nameLocked ? 'disabled' : ''}>
+    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Apelido</div>
+    <input type="text" class="quiz-input" id="profileNicknameInput" value="${profile.nickname || ''}" placeholder="Um apelido, se quiser" style="margin-bottom:14px;">
     <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Bio</div>
     <textarea class="quiz-input mystery-textarea" id="profileBioInput" placeholder="Conta um pouco sobre você...">${profile.bio || ''}</textarea>
-    <div class="modal-actions" style="margin-top:16px;">
+    <div id="profileNameError" style="color:var(--accent); font-size:12.5px; min-height:16px; margin-top:8px;"></div>
+    <div class="modal-actions" style="margin-top:8px;">
       <button class="btn-ghost" id="fecharProfileBtn">Fechar</button>
       <button class="btn-primary" id="salvarProfileBtn">Salvar</button>
     </div>
   `;
   profileOverlay.classList.add('show');
   document.getElementById('fecharProfileBtn').addEventListener('click', () => profileOverlay.classList.remove('show'));
+  document.getElementById('profilePhotoInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    pendingPhoto = await compressImageToDataUrl(file, 200);
+    const preview = document.getElementById('profilePhotoPreview');
+    preview.src = pendingPhoto;
+    preview.style.display = 'block';
+  });
   document.getElementById('salvarProfileBtn').addEventListener('click', async () => {
-    const name = document.getElementById('profileNameInput').value.trim() || 'Sem nome';
+    const nameInputEl = document.getElementById('profileNameInput');
+    const newName = nameInputEl.value.trim() || 'Sem nome';
+    const nickname = document.getElementById('profileNicknameInput').value.trim();
     const bio = document.getElementById('profileBioInput').value.trim();
-    await setDoc(doc(db, 'users', currentUid), { name, bio, createdAt: profile.createdAt || Date.now() });
-    visitorName = name;
+    const errorBox = document.getElementById('profileNameError');
+    errorBox.textContent = '';
+
+    let finalName = profile.name;
+    let finalNameChangedAt = profile.nameChangedAt || Date.now();
+
+    if(!nameLocked && newName !== profile.name){
+      finalName = newName;
+      finalNameChangedAt = Date.now();
+    } else if(nameLocked && newName !== profile.name){
+      errorBox.textContent = `Você só pode mudar o nome de novo em ${daysLeft} dia${daysLeft === 1 ? '' : 's'}.`;
+      return;
+    }
+
+    await setDoc(doc(db, 'users', currentUid), {
+      name: finalName,
+      nickname,
+      bio,
+      photo: pendingPhoto,
+      following: profile.following || [],
+      followers: profile.followers || [],
+      nameChangedAt: finalNameChangedAt,
+      createdAt: profile.createdAt || Date.now()
+    });
+    visitorName = finalName;
     const tagline = document.querySelector('.tagline');
     if(tagline) tagline.textContent = 'Oi, ' + visitorName + '! Experiências inesquecíveis.';
     profileOverlay.classList.remove('show');
@@ -461,6 +604,63 @@ async function openProfileModal(){
 }
 document.getElementById('profileBtn').addEventListener('click', openProfileModal);
 profileOverlay.addEventListener('click', (e) => { if(e.target === profileOverlay) profileOverlay.classList.remove('show'); });
+
+/* ---------------- Encontrar Pessoas ---------------- */
+async function searchUsers(){
+  const term = document.getElementById('searchUserInput').value.trim().toLowerCase();
+  const resultsBox = document.getElementById('searchResults');
+  if(!term){ resultsBox.innerHTML = ''; return; }
+  resultsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Buscando...</p>`;
+
+  const [allUsersSnap, meSnap] = await Promise.all([
+    getDocs(collection(db, 'users')),
+    getDoc(doc(db, 'users', currentUid))
+  ]);
+  const myFollowing = (meSnap.data() && meSnap.data().following) || [];
+  const myFollowingIds = myFollowing.map(f => f.uid);
+
+  const matches = [];
+  allUsersSnap.forEach(d => {
+    if(d.id === currentUid) return;
+    const data = d.data();
+    const matchesName = (data.name || '').toLowerCase().includes(term);
+    const matchesNick = (data.nickname || '').toLowerCase().includes(term);
+    if(matchesName || matchesNick){
+      matches.push({ uid: d.id, name: data.name, nickname: data.nickname, bio: data.bio, photo: data.photo });
+    }
+  });
+
+  if(!matches.length){
+    resultsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Ninguém encontrado com esse nome.</p>`;
+    return;
+  }
+
+  resultsBox.innerHTML = matches.map(m => `
+    <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
+      ${m.photo
+        ? `<img src="${m.photo}" style="width:44px; height:44px; border-radius:50%; object-fit:cover;">`
+        : `<div style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:18px;">👤</div>`}
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:14.5px;">${m.name}${m.nickname ? ` <span style="color:var(--muted); font-weight:500;">"${m.nickname}"</span>` : ''}</div>
+        <div style="color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${m.bio || ''}</div>
+      </div>
+      <button class="btn-primary add-friend-btn" data-uid="${m.uid}" data-name="${m.name}" style="padding:8px 14px; font-size:12.5px; width:auto; flex-shrink:0;" ${myFollowingIds.includes(m.uid) ? 'disabled' : ''}>${myFollowingIds.includes(m.uid) ? '✓ Seguindo' : '➕ Seguir'}</button>
+    </div>
+  `).join('');
+
+  resultsBox.querySelectorAll('.add-friend-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const uid = btn.dataset.uid;
+      const name = btn.dataset.name;
+      btn.disabled = true;
+      await updateDoc(doc(db, 'users', currentUid), { following: arrayUnion({ uid, name }) });
+      await updateDoc(doc(db, 'users', uid), { followers: arrayUnion({ uid: currentUid, name: visitorName }) });
+      btn.textContent = '✓ Seguindo';
+    });
+  });
+}
+document.getElementById('searchUserBtn').addEventListener('click', searchUsers);
+document.getElementById('searchUserInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') searchUsers(); });
 
 /* ---------------- Plans data ---------------- */
 const PLANS = [
