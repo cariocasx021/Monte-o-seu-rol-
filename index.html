@@ -168,6 +168,11 @@
   .stars-input span{ transition: color .15s ease; }
   .stars-input span.filled{ color: var(--gold); }
 
+  .capsule-entry{ margin-bottom:16px; }
+  .capsule-entry:last-child{ margin-bottom:0; }
+  .capsule-who{ font-weight:700; font-size:13.5px; color:var(--gold); margin-bottom:6px; }
+  .capsule-entry p{ font-size:14px; color:#e6dee2; line-height:1.6; margin:0; }
+
   .contract-box{ display:flex; flex-direction:column; gap:14px; margin-bottom:20px; }
   .contract-item{
     display:flex; align-items:center; gap:10px; font-size:14.5px; cursor:pointer;
@@ -286,6 +291,14 @@
   </div>
 </section>
 
+<section class="section" id="capsula">
+  <div class="section-head">
+    <div class="eyebrow">💞 Cápsula do Tempo</div>
+    <h2>Como você imagina nosso encontro?</h2>
+  </div>
+  <div class="feedback-box" id="capsuleBox"></div>
+</section>
+
 <footer>Victor Experience™ — feito com 🖤 pra momentos que valem a pena.</footer>
 
 <div id="ytPlayer" style="position:fixed; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;"></div>
@@ -300,7 +313,26 @@
   <div class="modal" id="quizModal"></div>
 </div>
 
-<script>
+<!-- Victor capsule modal -->
+<div class="overlay" id="capsuleOverlay">
+  <div class="modal" id="capsuleModal"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAgYr1x8pZfm7XdTwDFGbn04FAAj9ImGFk",
+  authDomain: "victor-experiencie-85867.firebaseapp.com",
+  projectId: "victor-experiencie-85867",
+  storageBucket: "victor-experiencie-85867.firebasestorage.app",
+  messagingSenderId: "789688393327",
+  appId: "1:789688393327:web:4c0f3ce7d8d6d8da7a779a"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const sharedDocRef = doc(db, "victorExperience", "shared");
 /* ---------------- Nome da visitante ---------------- */
 let visitorName = '';
 const nameGate = document.getElementById('nameGate');
@@ -443,22 +475,33 @@ const PREF_OPTIONS = [
 function renderPlanPrefStep(p){
   planModal.innerHTML = `
     <div class="modal-title">💭 O que você quer nesse encontro?</div>
-    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Escolha até 3:</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Escolha no mínimo 3 (pode marcar quantas quiser):</div>
     <div class="contract-box" id="prefBox">
+      <label class="contract-item" style="border-color:var(--gold);"><input type="checkbox" id="prefAllCheck"> ✅ Marcar todas</label>
       ${PREF_OPTIONS.map((opt,i) => `<label class="contract-item"><input type="checkbox" class="pref-check" data-opt="${opt}" ${((currentPlanAnswers.prefs||[]).includes(opt)) ? 'checked' : ''}> ${opt}</label>`).join('')}
     </div>
     <div class="modal-actions">
       <button class="btn-ghost" id="voltarBtn">⬅ Voltar</button>
-      <button class="btn-primary" id="continuarPrefBtn">Continuar</button>
+      <button class="btn-primary" id="continuarPrefBtn" disabled style="opacity:0.5;">Continuar</button>
     </div>
   `;
   document.getElementById('voltarBtn').addEventListener('click', () => renderPlanDateStep(p));
   const prefChecks = planModal.querySelectorAll('.pref-check');
+  const allCheck = document.getElementById('prefAllCheck');
+  const continuarPrefBtn = document.getElementById('continuarPrefBtn');
   function refreshPrefState(){
     const checkedCount = [...prefChecks].filter(c => c.checked).length;
-    prefChecks.forEach(c => { if(!c.checked) c.disabled = checkedCount >= 3; });
+    const allChecked = checkedCount === prefChecks.length;
+    allCheck.checked = allChecked;
+    const ok = checkedCount >= 3;
+    continuarPrefBtn.disabled = !ok;
+    continuarPrefBtn.style.opacity = ok ? '1' : '0.5';
   }
   prefChecks.forEach(c => c.addEventListener('change', refreshPrefState));
+  allCheck.addEventListener('change', () => {
+    prefChecks.forEach(c => c.checked = allCheck.checked);
+    refreshPrefState();
+  });
   refreshPrefState();
   document.getElementById('continuarPrefBtn').addEventListener('click', () => {
     currentPlanAnswers.prefs = [...prefChecks].filter(c => c.checked).map(c => c.dataset.opt);
@@ -511,7 +554,7 @@ function confirmPlan(p){
         <h3>Parabéns!!</h3>
         <p>Sua solicitação de <b>${p.name}</b> foi enviada<br>para a gerente da Victor Experience™.</p>
         <p style="font-size:13.5px;">📅 ${lastEncounter.dayLabel} · 🕔 ${lastEncounter.timeLabel}</p>
-        <p class="approval">Tempo de aprovação: depende da cliente 😂❤️</p>
+        <p class="approval">✅ Já aprovado pelo "vendedor" 😏❤️</p>
         <div class="modal-actions" style="margin-top:20px;">
           <button class="btn-primary" id="fecharBtn" style="width:100%;">Fechar</button>
         </div>
@@ -735,34 +778,29 @@ musicBtn.addEventListener('click', () => {
 let lastEncounter = null; // { planName, dateObj, dayLabel, timeLabel }
 let countdownInterval = null;
 
-function setLastEncounter(planName, dateStr, timeStr){
+function buildEncounterFromRaw(planName, dateStr, timeStr){
   let dateObj = null;
   if(dateStr){
     const [h, m] = (timeStr || '00:00').split(':').map(Number);
     dateObj = new Date(dateStr + 'T00:00:00');
     if(!isNaN(h)) dateObj.setHours(h || 0, m || 0, 0, 0);
   }
-  lastEncounter = {
+  return {
     planName,
     dateObj,
+    rawDateStr: dateStr,
     dayLabel: dateStr ? new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR') : 'a combinar',
     timeLabel: timeStr || 'a combinar'
   };
-  try{
-    localStorage.setItem('victorExp_lastEncounter', JSON.stringify({ planName, dateStr, timeStr }));
-  }catch(e){ /* localStorage indisponível (ex: preview do chat) — segue sem salvar */ }
-  startCountdown();
-  updateFeedbackSection();
 }
 
-function loadLastEncounter(){
+async function setLastEncounter(planName, dateStr, timeStr){
+  lastEncounter = buildEncounterFromRaw(planName, dateStr, timeStr);
+  startCountdown();
+  updateFeedbackSection();
   try{
-    const saved = localStorage.getItem('victorExp_lastEncounter');
-    if(saved){
-      const { planName, dateStr, timeStr } = JSON.parse(saved);
-      setLastEncounter(planName, dateStr, timeStr);
-    }
-  }catch(e){ /* localStorage indisponível — segue sem carregar */ }
+    await setDoc(sharedDocRef, { lastEncounter: { planName, dateStr, timeStr } }, { merge: true });
+  }catch(e){ console.warn('Firestore: falha ao salvar o encontro', e); }
 }
 
 function startCountdown(){
@@ -831,7 +869,99 @@ document.getElementById('enviarFeedbackBtn').addEventListener('click', () => {
     `<p style="text-align:center; color:var(--gold); font-size:14.5px;">💌 Obrigado pelo feedback!</p>`;
 });
 
-loadLastEncounter();
+/* ---------------- Cápsula do Tempo ---------------- */
+let capsuleData = { her: '', victor: '' };
+const capsuleOverlay = document.getElementById('capsuleOverlay');
+const capsuleModal = document.getElementById('capsuleModal');
+
+function getCapsuleRevealTime(dateObj){
+  const d = new Date(dateObj);
+  d.setDate(d.getDate() + 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+async function persistCapsule(){
+  try{
+    await setDoc(sharedDocRef, { capsule: { her: capsuleData.her, victor: capsuleData.victor } }, { merge: true });
+  }catch(e){ console.warn('Firestore: falha ao salvar a cápsula', e); }
+}
+
+function renderCapsule(){
+  const box = document.getElementById('capsuleBox');
+  if(!lastEncounter || !lastEncounter.dateObj){
+    box.innerHTML = `<p style="color:var(--muted); font-size:14px; margin:0;">Reserve um encontro com data e horário pra abrir a cápsula do tempo 🖤</p>`;
+    return;
+  }
+
+  const revealTime = getCapsuleRevealTime(lastEncounter.dateObj);
+  const unlocked = Date.now() >= revealTime.getTime();
+
+  if(unlocked){
+    box.innerHTML = `
+      <div class="capsule-entry">
+        <div class="capsule-who">💌 Ela imaginou:</div>
+        <p>${capsuleData.her || '(não escreveu nada)'}</p>
+      </div>
+      <div class="capsule-entry">
+        <div class="capsule-who">💌 Victor imaginou:</div>
+        <p>${capsuleData.victor || '(não escreveu nada)'}</p>
+      </div>
+    `;
+    return;
+  }
+
+  box.innerHTML = `
+    <p style="color:var(--muted); font-size:13px; margin:0 0 16px;">🔒 A cápsula abre em ${revealTime.toLocaleDateString('pt-BR')}, à meia-noite.</p>
+    <textarea class="quiz-input mystery-textarea" id="capsuleHerInput" placeholder="Escreve aqui...">${capsuleData.her || ''}</textarea>
+    <button class="btn-primary" id="saveCapsuleHerBtn" style="width:100%; margin-top:10px;">${capsuleData.her ? 'Atualizar' : 'Guardar'} minha parte</button>
+    <div style="text-align:center; margin-top:16px;">
+      <button class="btn-ghost" id="victorAreaBtn" style="font-size:12.5px;">✍️ Área do Victor</button>
+    </div>
+  `;
+  document.getElementById('saveCapsuleHerBtn').addEventListener('click', () => {
+    capsuleData.her = document.getElementById('capsuleHerInput').value.trim();
+    persistCapsule();
+    renderCapsule();
+  });
+  document.getElementById('victorAreaBtn').addEventListener('click', openVictorCapsuleModal);
+}
+
+function openVictorCapsuleModal(){
+  capsuleModal.innerHTML = `
+    <div class="modal-title">✍️ Área do Victor</div>
+    <div style="color:var(--muted); font-size:13px; margin-bottom:14px;">Como você imagina o encontro? (fica escondido até a data passar)</div>
+    <textarea class="quiz-input mystery-textarea" id="capsuleVictorInput" placeholder="Escreve aqui...">${capsuleData.victor || ''}</textarea>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button class="btn-ghost" id="fecharCapsuleBtn">Fechar</button>
+      <button class="btn-primary" id="saveCapsuleVictorBtn">${capsuleData.victor ? 'Atualizar' : 'Guardar'}</button>
+    </div>
+  `;
+  capsuleOverlay.classList.add('show');
+  document.getElementById('fecharCapsuleBtn').addEventListener('click', () => capsuleOverlay.classList.remove('show'));
+  document.getElementById('saveCapsuleVictorBtn').addEventListener('click', () => {
+    capsuleData.victor = document.getElementById('capsuleVictorInput').value.trim();
+    persistCapsule();
+    capsuleOverlay.classList.remove('show');
+  });
+}
+capsuleOverlay.addEventListener('click', (e) => { if(e.target === capsuleOverlay) capsuleOverlay.classList.remove('show'); });
+
+onSnapshot(sharedDocRef, (snap) => {
+  const data = snap.data() || {};
+  lastEncounter = data.lastEncounter
+    ? buildEncounterFromRaw(data.lastEncounter.planName, data.lastEncounter.dateStr, data.lastEncounter.timeStr)
+    : null;
+  capsuleData = {
+    her: (data.capsule && data.capsule.her) || '',
+    victor: (data.capsule && data.capsule.victor) || ''
+  };
+  startCountdown();
+  updateFeedbackSection();
+  renderCapsule();
+}, (err) => {
+  console.warn('Firestore: falha ao escutar mudanças', err);
+});
 </script>
 </body>
 </html>
