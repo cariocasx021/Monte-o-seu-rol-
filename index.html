@@ -356,7 +356,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, getDocs, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, getDocs, arrayUnion, query, where, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -445,15 +445,20 @@ document.getElementById('logoutBtn').addEventListener('click', () => signOut(aut
 
 let myProfileUnsub = null;
 let myProfileData = null;
+let receivedInvitesUnsub = null;
+let sentInvitesUnsub = null;
+let receivedInvites = [];
+let sentInvites = [];
 
-function updateNotifBadge(profileData){
+function updateNotifBadge(){
   const badge = document.getElementById('notifBadge');
   if(!badge) return;
-  const followers = (profileData && profileData.followers) || [];
-  const following = (profileData && profileData.following) || [];
+  const followers = (myProfileData && myProfileData.followers) || [];
+  const following = (myProfileData && myProfileData.following) || [];
   const followingIds = following.map(f => f.uid);
-  const pending = followers.filter(f => !followingIds.includes(f.uid)).length;
-  badge.style.display = pending > 0 ? 'block' : 'none';
+  const pendingFollows = followers.filter(f => !followingIds.includes(f.uid)).length;
+  const pendingInvites = receivedInvites.filter(i => i.status === 'pending').length;
+  badge.style.display = (pendingFollows + pendingInvites) > 0 ? 'block' : 'none';
 }
 
 function renderNotifications(profileData){
@@ -504,10 +509,92 @@ function renderNotifications(profileData){
   });
 }
 
+function renderReceivedInvites(){
+  const box = document.getElementById('receivedInvitesList');
+  if(!box) return;
+  const pending = receivedInvites.filter(i => i.status === 'pending');
+  if(!pending.length){
+    box.innerHTML = `<p style="color:var(--muted); font-size:13px;">Nenhum convite de encontro por enquanto.</p>`;
+    return;
+  }
+  box.innerHTML = pending.map(inv => {
+    const formatted = buildEncounterFromRaw(inv.planName, inv.dateStr, inv.timeStr);
+    return `
+      <div style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
+        <div style="font-size:14px; margin-bottom:8px;"><b>${inv.fromName}</b> te convidou pra <b>${inv.planName}</b><br>
+        <span style="color:var(--muted); font-size:12.5px;">📅 ${formatted.dayLabel} · 🕔 ${formatted.timeLabel}</span></div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-ghost invite-decline-btn" data-id="${inv.id}" style="flex:1; padding:8px; font-size:12.5px;">Recusar</button>
+          <button class="btn-primary invite-accept-btn" data-id="${inv.id}" style="flex:1; padding:8px; font-size:12.5px;">Aceitar</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  box.querySelectorAll('.invite-accept-btn').forEach(btn => {
+    btn.addEventListener('click', () => respondInvite(btn.dataset.id, true));
+  });
+  box.querySelectorAll('.invite-decline-btn').forEach(btn => {
+    btn.addEventListener('click', () => respondInvite(btn.dataset.id, false));
+  });
+}
+
+function renderSentInvites(){
+  const box = document.getElementById('sentInvitesList');
+  if(!box) return;
+  const resolved = sentInvites.filter(i => i.status !== 'pending');
+  const pendingCount = sentInvites.filter(i => i.status === 'pending').length;
+  if(!resolved.length && !pendingCount){
+    box.innerHTML = `<p style="color:var(--muted); font-size:13px;">Você ainda não enviou nenhum convite.</p>`;
+    return;
+  }
+  let html = '';
+  if(pendingCount){
+    html += `<p style="color:var(--muted); font-size:13px;">${pendingCount} convite${pendingCount === 1 ? '' : 's'} aguardando resposta.</p>`;
+  }
+  html += resolved.slice().reverse().map(inv => `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-size:13.5px;"><b>${inv.toName}</b> ${inv.status === 'accepted' ? 'aceitou' : 'recusou'} o convite pra ${inv.planName}</div>
+      <button class="btn-ghost dismiss-invite-btn" data-id="${inv.id}" style="padding:6px 10px; font-size:12px; width:auto; flex-shrink:0;">OK</button>
+    </div>
+  `).join('');
+  box.innerHTML = html;
+
+  box.querySelectorAll('.dismiss-invite-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await deleteDoc(doc(db, 'invites', btn.dataset.id));
+    });
+  });
+}
+
+async function respondInvite(inviteId, accept){
+  const inviteRef = doc(db, 'invites', inviteId);
+  const inviteSnap = await getDoc(inviteRef);
+  if(!inviteSnap.exists()) return;
+  const inv = inviteSnap.data();
+  await updateDoc(inviteRef, { status: accept ? 'accepted' : 'declined' });
+  if(accept){
+    await setDoc(doc(db, 'users', inv.fromUid), { lastEncounter: { planName: inv.planName, dateStr: inv.dateStr, timeStr: inv.timeStr } }, { merge: true });
+    await setDoc(doc(db, 'users', inv.toUid), { lastEncounter: { planName: inv.planName, dateStr: inv.dateStr, timeStr: inv.timeStr } }, { merge: true });
+  }
+  const formatted = buildEncounterFromRaw(inv.planName, inv.dateStr, inv.timeStr);
+  sendToEmail(accept ? 'Convite de encontro aceito' : 'Convite de encontro recusado', {
+    de: inv.fromName,
+    para: inv.toName,
+    plano: inv.planName,
+    dia: formatted.dayLabel,
+    horario: formatted.timeLabel,
+    resposta: accept ? 'Aceito' : 'Recusado'
+  });
+}
+
 function openNotifModal(){
   notifModal.innerHTML = `
     <div class="modal-title">🔔 Notificações</div>
-    <div style="color:var(--muted); font-size:13px; margin-bottom:14px;">Quem começou a te seguir</div>
+    <div style="color:var(--muted); font-size:12.5px; font-weight:600; margin-bottom:8px;">💌 Convites de encontro</div>
+    <div id="receivedInvitesList" style="margin-bottom:18px;"></div>
+    <div id="sentInvitesList" style="margin-bottom:18px;"></div>
+    <div style="color:var(--muted); font-size:12.5px; font-weight:600; margin-bottom:8px;">Quem começou a te seguir</div>
     <div id="notificationsList"></div>
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn-ghost" id="fecharNotifBtn" style="width:100%;">Fechar</button>
@@ -515,6 +602,8 @@ function openNotifModal(){
   `;
   notifOverlay.classList.add('show');
   renderNotifications(myProfileData);
+  renderReceivedInvites();
+  renderSentInvites();
   document.getElementById('fecharNotifBtn').addEventListener('click', () => notifOverlay.classList.remove('show'));
 }
 
@@ -538,12 +627,27 @@ onAuthStateChanged(auth, async (user) => {
       const data = snap.data();
       myProfileData = data;
       renderNotifications(data);
-      updateNotifBadge(data);
+      updateNotifBadge();
       lastEncounter = data.lastEncounter
         ? buildEncounterFromRaw(data.lastEncounter.planName, data.lastEncounter.dateStr, data.lastEncounter.timeStr)
         : null;
       startCountdown();
       updateFeedbackSection();
+    });
+
+    if(receivedInvitesUnsub) receivedInvitesUnsub();
+    receivedInvitesUnsub = onSnapshot(query(collection(db, 'invites'), where('toUid', '==', user.uid)), (snap) => {
+      receivedInvites = [];
+      snap.forEach(d => receivedInvites.push({ id: d.id, ...d.data() }));
+      renderReceivedInvites();
+      updateNotifBadge();
+    });
+
+    if(sentInvitesUnsub) sentInvitesUnsub();
+    sentInvitesUnsub = onSnapshot(query(collection(db, 'invites'), where('fromUid', '==', user.uid)), (snap) => {
+      sentInvites = [];
+      snap.forEach(d => sentInvites.push({ id: d.id, ...d.data() }));
+      renderSentInvites();
     });
   } else {
     currentUid = null;
@@ -554,6 +658,10 @@ onAuthStateChanged(auth, async (user) => {
     authPasswordInput.value = '';
     authNameInput.value = '';
     if(myProfileUnsub){ myProfileUnsub(); myProfileUnsub = null; }
+    if(receivedInvitesUnsub){ receivedInvitesUnsub(); receivedInvitesUnsub = null; }
+    if(sentInvitesUnsub){ sentInvitesUnsub(); sentInvitesUnsub = null; }
+    receivedInvites = [];
+    sentInvites = [];
     lastEncounter = null;
     startCountdown();
     const box = document.getElementById('notificationsList');
@@ -1039,6 +1147,53 @@ function renderPlanPrefStep(p){
   refreshPrefState();
   document.getElementById('continuarPrefBtn').addEventListener('click', () => {
     currentPlanAnswers.prefs = [...prefChecks].filter(c => c.checked).map(c => c.dataset.opt);
+    renderPlanWithStep(p);
+  });
+}
+
+async function renderPlanWithStep(p){
+  const meSnap = await getDoc(doc(db, 'users', currentUid));
+  const meData = meSnap.data() || {};
+  const connMap = new Map();
+  (meData.following || []).forEach(f => connMap.set(f.uid, f.name));
+  (meData.followers || []).forEach(f => connMap.set(f.uid, f.name));
+  const connections = [...connMap.entries()].map(([uid, name]) => ({ uid, name }));
+
+  if(!connections.length){
+    planModal.innerHTML = `
+      <div class="modal-title">💌 Com quem você vai?</div>
+      <p style="color:var(--muted); font-size:13.5px;">Você ainda não segue nem é seguida por ninguém. Siga alguém em "Encontrar Pessoas" (🔍) antes de marcar um encontro.</p>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="voltarBtn" style="width:100%;">⬅ Voltar</button>
+      </div>
+    `;
+    document.getElementById('voltarBtn').addEventListener('click', () => renderPlanPrefStep(p));
+    return;
+  }
+
+  planModal.innerHTML = `
+    <div class="modal-title">💌 Com quem você vai?</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Escolha uma pessoa da sua lista:</div>
+    <div class="contract-box" id="withBox">
+      ${connections.map(c => `<label class="contract-item"><input type="radio" name="withPerson" class="with-check" value="${c.uid}" data-name="${c.name}" ${currentPlanAnswers.withUid === c.uid ? 'checked' : ''}> ${c.name}</label>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="voltarBtn">⬅ Voltar</button>
+      <button class="btn-primary" id="continuarWithBtn" ${currentPlanAnswers.withUid ? '' : 'disabled'} style="opacity:${currentPlanAnswers.withUid ? '1' : '0.5'};">Continuar</button>
+    </div>
+  `;
+  document.getElementById('voltarBtn').addEventListener('click', () => renderPlanPrefStep(p));
+  const withChecks = planModal.querySelectorAll('.with-check');
+  const continuarWithBtn = document.getElementById('continuarWithBtn');
+  withChecks.forEach(c => c.addEventListener('change', () => {
+    continuarWithBtn.disabled = false;
+    continuarWithBtn.style.opacity = '1';
+  }));
+  continuarWithBtn.addEventListener('click', () => {
+    const checked = planModal.querySelector('.with-check:checked');
+    if(!checked) return;
+    currentPlanAnswers.withUid = checked.value;
+    currentPlanAnswers.withName = checked.dataset.name;
     renderPlanContractStep(p);
   });
 }
@@ -1057,7 +1212,7 @@ function renderPlanContractStep(p){
       <button class="btn-primary" id="assinarBtn" disabled style="opacity:0.5;">Assinar ❤️</button>
     </div>
   `;
-  document.getElementById('voltarBtn').addEventListener('click', () => renderPlanPrefStep(p));
+  document.getElementById('voltarBtn').addEventListener('click', () => renderPlanWithStep(p));
   const checks = planModal.querySelectorAll('.contract-check');
   const assinarBtn = document.getElementById('assinarBtn');
   checks.forEach(c => c.addEventListener('change', () => {
@@ -1065,37 +1220,45 @@ function renderPlanContractStep(p){
     assinarBtn.disabled = !allChecked;
     assinarBtn.style.opacity = allChecked ? '1' : '0.5';
   }));
-  assinarBtn.addEventListener('click', () => confirmPlan(p));
+  assinarBtn.addEventListener('click', () => sendEncounterInvite(p));
 }
 function closePlan(){ planOverlay.classList.remove('show'); }
 planOverlay.addEventListener('click', (e) => { if(e.target === planOverlay) closePlan(); });
 
-function confirmPlan(p){
+async function sendEncounterInvite(p){
   burstConfetti();
-  setLastEncounter(p.name, currentPlanAnswers.day, currentPlanAnswers.time);
-  sendToEmail('Novo plano escolhido: ' + p.name, {
-    nome: visitorName,
+  const invite = {
+    fromUid: currentUid,
+    fromName: visitorName,
+    toUid: currentPlanAnswers.withUid,
+    toName: currentPlanAnswers.withName,
+    planName: p.name,
+    dateStr: currentPlanAnswers.day,
+    timeStr: currentPlanAnswers.time,
+    prefs: currentPlanAnswers.prefs || [],
+    status: 'pending',
+    createdAt: Date.now()
+  };
+  await addDoc(collection(db, 'invites'), invite);
+  const formatted = buildEncounterFromRaw(p.name, currentPlanAnswers.day, currentPlanAnswers.time);
+  sendToEmail('Novo convite de encontro enviado', {
+    de: visitorName,
+    para: currentPlanAnswers.withName,
     plano: p.name,
-    dia: lastEncounter.dayLabel,
-    horario: lastEncounter.timeLabel,
-    preferencias: (currentPlanAnswers.prefs || []).join(', ') || '(nenhuma escolhida)',
-    inclui: p.includes.join(', ')
+    dia: formatted.dayLabel,
+    horario: formatted.timeLabel
   });
-  setTimeout(() => {
-    planModal.innerHTML = `
-      <div class="success-wrap">
-        <div style="font-size:40px;">🎊</div>
-        <h3>Parabéns!!</h3>
-        <p>Sua solicitação de <b>${p.name}</b> foi enviada<br>para a gerente da Victor Experience™.</p>
-        <p style="font-size:13.5px;">📅 ${lastEncounter.dayLabel} · 🕔 ${lastEncounter.timeLabel}</p>
-        <p class="approval">✅ Já aprovado pelo "vendedor" 😏❤️</p>
-        <div class="modal-actions" style="margin-top:20px;">
-          <button class="btn-primary" id="fecharBtn" style="width:100%;">Fechar</button>
-        </div>
+  planModal.innerHTML = `
+    <div class="success-wrap">
+      <div style="font-size:40px;">💌</div>
+      <h3>Convite enviado!</h3>
+      <p>Assim que <b>${currentPlanAnswers.withName}</b> aceitar ou recusar, a resposta aparece na central de notificações (🔔).</p>
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn-primary" id="fecharBtn" style="width:100%;">Fechar</button>
       </div>
-    `;
-    document.getElementById('fecharBtn').addEventListener('click', closePlan);
-  }, 500);
+    </div>
+  `;
+  document.getElementById('fecharBtn').addEventListener('click', closePlan);
 }
 
 /* ---------------- Envio de e-mail (Web3Forms) ---------------- */
