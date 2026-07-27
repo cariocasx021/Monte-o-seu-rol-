@@ -470,10 +470,12 @@ function renderNotifications(profileData){
 
   box.innerHTML = followers.slice().reverse().map(f => `
     <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
-      <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;">👤</div>
-      <div style="flex:1; min-width:0;">
-        <div style="font-weight:600; font-size:14px;">${f.name}</div>
-        <div style="color:var(--muted); font-size:12px;">começou a te seguir</div>
+      <div class="notif-name-trigger" data-uid="${f.uid}" style="display:flex; align-items:center; gap:12px; flex:1; min-width:0; cursor:pointer;">
+        <div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;">👤</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600; font-size:14px;">${f.name}</div>
+          <div style="color:var(--muted); font-size:12px;">começou a te seguir</div>
+        </div>
       </div>
       ${followingIds.includes(f.uid)
         ? `<span style="color:var(--muted); font-size:12px; flex-shrink:0;">✓ Segue de volta</span>`
@@ -482,8 +484,16 @@ function renderNotifications(profileData){
     </div>
   `).join('');
 
+  box.querySelectorAll('.notif-name-trigger').forEach(el => {
+    el.addEventListener('click', () => {
+      notifOverlay.classList.remove('show');
+      openViewProfile(el.dataset.uid);
+    });
+  });
+
   box.querySelectorAll('.follow-back-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const uid = btn.dataset.uid;
       const name = btn.dataset.name;
       btn.disabled = true;
@@ -725,7 +735,7 @@ function openSearchModal(){
   searchModal.innerHTML = `
     <div class="modal-title">🔍 Encontrar Pessoas</div>
     <div style="display:flex; gap:10px; margin-bottom:16px;">
-      <input type="text" class="quiz-input" id="searchUserInput" placeholder="Buscar por nome...">
+      <input type="text" class="quiz-input" id="searchUserInput" placeholder="Buscar por apelido...">
       <button class="btn-primary" id="searchUserBtn" style="white-space:nowrap; width:auto; padding:0 18px;">Buscar</button>
     </div>
     <div id="searchResults"></div>
@@ -775,15 +785,14 @@ async function searchUsers(){
   allUsersSnap.forEach(d => {
     if(d.id === currentUid) return;
     const data = d.data();
-    const matchesName = (data.name || '').toLowerCase().includes(term);
     const matchesNick = (data.nickname || '').toLowerCase().includes(term);
-    if(matchesName || matchesNick){
+    if(matchesNick){
       matches.push({ uid: d.id, name: data.name, nickname: data.nickname, bio: data.bio, photo: data.photo });
     }
   });
 
   if(!matches.length){
-    resultsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Ninguém encontrado com esse nome.</p>`;
+    resultsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Ninguém encontrado com esse apelido.</p>`;
     return;
   }
 
