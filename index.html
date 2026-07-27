@@ -222,7 +222,7 @@
 </head>
 <body>
 
-<div class="overlay show" id="authGate" style="z-index:300;">
+<div class="overlay show" id="authGate" style="z-index:300; background: var(--bg); backdrop-filter: none;">
   <div class="modal">
     <div class="modal-title" id="authTitle">🖤 Entrar</div>
     <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;" id="authSubtitle">Entre com seu e-mail e senha</div>
@@ -244,6 +244,10 @@
 <div class="topbar">
   <span class="home-pill">🖤 Página inicial</span>
   <div style="display:flex; gap:8px;">
+    <button class="music-btn" id="searchBtn" title="Buscar pessoas">🔍</button>
+    <button class="music-btn" id="notifBtn" title="Notificações" style="position:relative;">
+      🔔<span id="notifBadge" style="display:none; position:absolute; top:2px; right:2px; width:9px; height:9px; border-radius:50%; background:var(--accent);"></span>
+    </button>
     <button class="music-btn" id="profileBtn" title="Meu perfil">👤</button>
     <button class="music-btn" id="musicBtn" title="Música ambiente">🎵</button>
     <button class="music-btn" id="logoutBtn" title="Sair">🚪</button>
@@ -255,6 +259,21 @@
   <div class="modal" id="profileModal"></div>
 </div>
 
+<!-- Search modal -->
+<div class="overlay" id="searchOverlay">
+  <div class="modal" id="searchModal"></div>
+</div>
+
+<!-- Notifications modal -->
+<div class="overlay" id="notifOverlay">
+  <div class="modal" id="notifModal"></div>
+</div>
+
+<!-- View profile modal (perfil de outra pessoa) -->
+<div class="overlay" id="viewProfileOverlay">
+  <div class="modal" id="viewProfileModal"></div>
+</div>
+
 <section class="hero">
   <div class="hero-mark">🖤</div>
   <h1 class="brand">Victor Experience™</h1>
@@ -262,25 +281,6 @@
   <button class="cta" id="ctaPlanos">Conheça nossos planos</button>
 </section>
 
-<section class="section" id="pessoas">
-  <div class="section-head">
-    <div class="eyebrow">🔍 Comunidade</div>
-    <h2>Encontrar Pessoas</h2>
-  </div>
-  <div style="display:flex; gap:10px; margin-bottom:20px;">
-    <input type="text" class="quiz-input" id="searchUserInput" placeholder="Buscar por nome...">
-    <button class="btn-primary" id="searchUserBtn" style="white-space:nowrap; width:auto; padding:0 18px;">Buscar</button>
-  </div>
-  <div id="searchResults"></div>
-</section>
-
-<section class="section" id="notificacoes">
-  <div class="section-head">
-    <div class="eyebrow">🔔 Notificações</div>
-    <h2>Quem começou a te seguir</h2>
-  </div>
-  <div id="notificationsList"></div>
-</section>
 
 <section class="section" id="planos">
   <div class="section-head">
@@ -351,7 +351,6 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 const auth = getAuth(firebaseApp);
-const sharedDocRef = doc(db, "victorExperience", "shared");
 /* ---------------- Login / Cadastro ---------------- */
 let visitorName = '';
 let currentUid = null;
@@ -426,6 +425,17 @@ authSubmitBtn.addEventListener('click', submitAuth);
 document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
 
 let myProfileUnsub = null;
+let myProfileData = null;
+
+function updateNotifBadge(profileData){
+  const badge = document.getElementById('notifBadge');
+  if(!badge) return;
+  const followers = (profileData && profileData.followers) || [];
+  const following = (profileData && profileData.following) || [];
+  const followingIds = following.map(f => f.uid);
+  const pending = followers.filter(f => !followingIds.includes(f.uid)).length;
+  badge.style.display = pending > 0 ? 'block' : 'none';
+}
 
 function renderNotifications(profileData){
   const box = document.getElementById('notificationsList');
@@ -465,6 +475,20 @@ function renderNotifications(profileData){
   });
 }
 
+function openNotifModal(){
+  notifModal.innerHTML = `
+    <div class="modal-title">🔔 Notificações</div>
+    <div style="color:var(--muted); font-size:13px; margin-bottom:14px;">Quem começou a te seguir</div>
+    <div id="notificationsList"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-ghost" id="fecharNotifBtn" style="width:100%;">Fechar</button>
+    </div>
+  `;
+  notifOverlay.classList.add('show');
+  renderNotifications(myProfileData);
+  document.getElementById('fecharNotifBtn').addEventListener('click', () => notifOverlay.classList.remove('show'));
+}
+
 onAuthStateChanged(auth, async (user) => {
   if(user){
     currentUid = user.uid;
@@ -481,24 +505,47 @@ onAuthStateChanged(auth, async (user) => {
 
     if(myProfileUnsub) myProfileUnsub();
     myProfileUnsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-      if(snap.exists()) renderNotifications(snap.data());
+      if(!snap.exists()) return;
+      const data = snap.data();
+      myProfileData = data;
+      renderNotifications(data);
+      updateNotifBadge(data);
+      lastEncounter = data.lastEncounter
+        ? buildEncounterFromRaw(data.lastEncounter.planName, data.lastEncounter.dateStr, data.lastEncounter.timeStr)
+        : null;
+      startCountdown();
+      updateFeedbackSection();
     });
   } else {
     currentUid = null;
     visitorName = '';
+    myProfileData = null;
     authGate.classList.add('show');
     authEmailInput.value = '';
     authPasswordInput.value = '';
     authNameInput.value = '';
     if(myProfileUnsub){ myProfileUnsub(); myProfileUnsub = null; }
+    lastEncounter = null;
+    startCountdown();
     const box = document.getElementById('notificationsList');
     if(box) box.innerHTML = '';
+    const badge = document.getElementById('notifBadge');
+    if(badge) badge.style.display = 'none';
   }
 });
 
 /* ---------------- Meu Perfil ---------------- */
 const profileOverlay = document.getElementById('profileOverlay');
 const profileModal = document.getElementById('profileModal');
+const notifOverlay = document.getElementById('notifOverlay');
+const notifModal = document.getElementById('notifModal');
+const searchOverlay = document.getElementById('searchOverlay');
+const searchModal = document.getElementById('searchModal');
+const viewProfileOverlay = document.getElementById('viewProfileOverlay');
+const viewProfileModal = document.getElementById('viewProfileModal');
+
+document.getElementById('notifBtn').addEventListener('click', openNotifModal);
+notifOverlay.addEventListener('click', (e) => { if(e.target === notifOverlay) notifOverlay.classList.remove('show'); });
 
 function compressImageToDataUrl(file, maxSize){
   return new Promise((resolve, reject) => {
@@ -606,6 +653,27 @@ document.getElementById('profileBtn').addEventListener('click', openProfileModal
 profileOverlay.addEventListener('click', (e) => { if(e.target === profileOverlay) profileOverlay.classList.remove('show'); });
 
 /* ---------------- Encontrar Pessoas ---------------- */
+function openSearchModal(){
+  searchModal.innerHTML = `
+    <div class="modal-title">🔍 Encontrar Pessoas</div>
+    <div style="display:flex; gap:10px; margin-bottom:16px;">
+      <input type="text" class="quiz-input" id="searchUserInput" placeholder="Buscar por nome...">
+      <button class="btn-primary" id="searchUserBtn" style="white-space:nowrap; width:auto; padding:0 18px;">Buscar</button>
+    </div>
+    <div id="searchResults"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-ghost" id="fecharSearchBtn" style="width:100%;">Fechar</button>
+    </div>
+  `;
+  searchOverlay.classList.add('show');
+  document.getElementById('searchUserBtn').addEventListener('click', searchUsers);
+  document.getElementById('searchUserInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') searchUsers(); });
+  document.getElementById('searchUserInput').focus();
+  document.getElementById('fecharSearchBtn').addEventListener('click', () => searchOverlay.classList.remove('show'));
+}
+document.getElementById('searchBtn').addEventListener('click', openSearchModal);
+searchOverlay.addEventListener('click', (e) => { if(e.target === searchOverlay) searchOverlay.classList.remove('show'); });
+
 async function searchUsers(){
   const term = document.getElementById('searchUserInput').value.trim().toLowerCase();
   const resultsBox = document.getElementById('searchResults');
@@ -637,16 +705,22 @@ async function searchUsers(){
 
   resultsBox.innerHTML = matches.map(m => `
     <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
-      ${m.photo
-        ? `<img src="${m.photo}" style="width:44px; height:44px; border-radius:50%; object-fit:cover;">`
-        : `<div style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:18px;">👤</div>`}
-      <div style="flex:1; min-width:0;">
-        <div style="font-weight:600; font-size:14.5px;">${m.name}${m.nickname ? ` <span style="color:var(--muted); font-weight:500;">"${m.nickname}"</span>` : ''}</div>
-        <div style="color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${m.bio || ''}</div>
+      <div class="view-profile-trigger" data-uid="${m.uid}" style="display:flex; align-items:center; gap:12px; flex:1; min-width:0; cursor:pointer;">
+        ${m.photo
+          ? `<img src="${m.photo}" style="width:44px; height:44px; border-radius:50%; object-fit:cover;">`
+          : `<div style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:18px;">👤</div>`}
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600; font-size:14.5px;">${m.name}${m.nickname ? ` <span style="color:var(--muted); font-weight:500;">"${m.nickname}"</span>` : ''}</div>
+          <div style="color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${m.bio || ''}</div>
+        </div>
       </div>
       <button class="btn-primary add-friend-btn" data-uid="${m.uid}" data-name="${m.name}" style="padding:8px 14px; font-size:12.5px; width:auto; flex-shrink:0;" ${myFollowingIds.includes(m.uid) ? 'disabled' : ''}>${myFollowingIds.includes(m.uid) ? '✓ Seguindo' : '➕ Seguir'}</button>
     </div>
   `).join('');
+
+  resultsBox.querySelectorAll('.view-profile-trigger').forEach(el => {
+    el.addEventListener('click', () => openViewProfile(el.dataset.uid));
+  });
 
   resultsBox.querySelectorAll('.add-friend-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -659,8 +733,46 @@ async function searchUsers(){
     });
   });
 }
-document.getElementById('searchUserBtn').addEventListener('click', searchUsers);
-document.getElementById('searchUserInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') searchUsers(); });
+
+/* ---------------- Ver perfil de outra pessoa (estilo Instagram) ---------------- */
+async function openViewProfile(uid){
+  const snap = await getDoc(doc(db, 'users', uid));
+  if(!snap.exists()) return;
+  const data = snap.data();
+  const meSnap = await getDoc(doc(db, 'users', currentUid));
+  const myFollowing = (meSnap.data() && meSnap.data().following) || [];
+  const isFollowing = myFollowing.some(f => f.uid === uid);
+  const followersCount = (data.followers || []).length;
+  const followingCount = (data.following || []).length;
+
+  viewProfileModal.innerHTML = `
+    <div style="text-align:center;">
+      ${data.photo
+        ? `<img src="${data.photo}" style="width:84px; height:84px; border-radius:50%; object-fit:cover; margin-bottom:12px;">`
+        : `<div style="width:84px; height:84px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 12px;">👤</div>`}
+      <div style="font-size:19px; font-weight:700;">${data.name}${data.nickname ? ` <span style="color:var(--muted); font-weight:500; font-size:15px;">"${data.nickname}"</span>` : ''}</div>
+      <div style="color:var(--muted); font-size:13.5px; margin:8px 0 16px;">${data.bio || ''}</div>
+      <div style="display:flex; justify-content:center; gap:28px; margin-bottom:20px;">
+        <div><b style="font-size:16px; display:block;">${followersCount}</b><span style="color:var(--muted); font-size:12px;">seguidores</span></div>
+        <div><b style="font-size:16px; display:block;">${followingCount}</b><span style="color:var(--muted); font-size:12px;">seguindo</span></div>
+      </div>
+      <button class="btn-primary" id="viewProfileFollowBtn" style="width:100%;" ${isFollowing ? 'disabled' : ''}>${isFollowing ? '✓ Seguindo' : '➕ Seguir'}</button>
+      <button class="btn-ghost" id="fecharViewProfileBtn" style="width:100%; margin-top:10px;">Fechar</button>
+    </div>
+  `;
+  viewProfileOverlay.classList.add('show');
+  document.getElementById('fecharViewProfileBtn').addEventListener('click', () => viewProfileOverlay.classList.remove('show'));
+  if(!isFollowing){
+    document.getElementById('viewProfileFollowBtn').addEventListener('click', async () => {
+      await updateDoc(doc(db, 'users', currentUid), { following: arrayUnion({ uid, name: data.name }) });
+      await updateDoc(doc(db, 'users', uid), { followers: arrayUnion({ uid: currentUid, name: visitorName }) });
+      const btn = document.getElementById('viewProfileFollowBtn');
+      btn.textContent = '✓ Seguindo';
+      btn.disabled = true;
+    });
+  }
+}
+viewProfileOverlay.addEventListener('click', (e) => { if(e.target === viewProfileOverlay) viewProfileOverlay.classList.remove('show'); });
 
 /* ---------------- Plans data ---------------- */
 const PLANS = [
@@ -1110,8 +1222,9 @@ async function setLastEncounter(planName, dateStr, timeStr){
   lastEncounter = buildEncounterFromRaw(planName, dateStr, timeStr);
   startCountdown();
   updateFeedbackSection();
+  if(!currentUid) return;
   try{
-    await setDoc(sharedDocRef, { lastEncounter: { planName, dateStr, timeStr } }, { merge: true });
+    await setDoc(doc(db, 'users', currentUid), { lastEncounter: { planName, dateStr, timeStr } }, { merge: true });
   }catch(e){ console.warn('Firestore: falha ao salvar o encontro', e); }
 }
 
@@ -1179,17 +1292,6 @@ document.getElementById('enviarFeedbackBtn').addEventListener('click', () => {
   });
   document.querySelector('#feedback .feedback-box').innerHTML =
     `<p style="text-align:center; color:var(--gold); font-size:14.5px;">💌 Obrigado pelo feedback!</p>`;
-});
-
-onSnapshot(sharedDocRef, (snap) => {
-  const data = snap.data() || {};
-  lastEncounter = data.lastEncounter
-    ? buildEncounterFromRaw(data.lastEncounter.planName, data.lastEncounter.dateStr, data.lastEncounter.timeStr)
-    : null;
-  startCountdown();
-  updateFeedbackSection();
-}, (err) => {
-  console.warn('Firestore: falha ao escutar mudanças', err);
 });
 </script>
 </body>
