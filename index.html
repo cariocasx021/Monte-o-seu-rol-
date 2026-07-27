@@ -427,7 +427,7 @@ async function submitAuth(){
       const name = authNameInput.value.trim();
       if(!name){ authError.textContent = 'Digita seu nome.'; authSubmitBtn.disabled = false; return; }
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await setDoc(doc(db, 'users', cred.user.uid), { name, nickname: '', bio: '', photo: '', following: [], followers: [], nameChangedAt: Date.now(), createdAt: Date.now() });
+      await setDoc(doc(db, 'users', cred.user.uid), { name, nickname: '', bio: '', photo: '', following: [], followers: [], likes: [], nameChangedAt: Date.now(), nicknameChangedAt: null, createdAt: Date.now() });
     } else {
       await signInWithEmailAndPassword(auth, email, password);
     }
@@ -513,7 +513,7 @@ onAuthStateChanged(auth, async (user) => {
     currentUid = user.uid;
     let profileSnap = await getDoc(doc(db, 'users', user.uid));
     if(!profileSnap.exists()){
-      await setDoc(doc(db, 'users', user.uid), { name: 'Sem nome', nickname: '', bio: '', photo: '', following: [], followers: [], nameChangedAt: Date.now(), createdAt: Date.now() });
+      await setDoc(doc(db, 'users', user.uid), { name: 'Sem nome', nickname: '', bio: '', photo: '', following: [], followers: [], likes: [], nameChangedAt: Date.now(), nicknameChangedAt: null, createdAt: Date.now() });
       profileSnap = await getDoc(doc(db, 'users', user.uid));
     }
     const profile = profileSnap.data();
@@ -598,18 +598,35 @@ function compressImageToDataUrl(file, maxSize){
   });
 }
 
+async function isNicknameTaken(nickname, excludeUid){
+  const term = nickname.trim().toLowerCase();
+  if(!term) return false;
+  const allUsersSnap = await getDocs(collection(db, 'users'));
+  let taken = false;
+  allUsersSnap.forEach(d => {
+    if(d.id === excludeUid) return;
+    const data = d.data();
+    if((data.nickname || '').trim().toLowerCase() === term) taken = true;
+  });
+  return taken;
+}
+
 async function openProfileModal(){
   if(!currentUid) return;
   const snap = await getDoc(doc(db, 'users', currentUid));
-  const profile = snap.data() || { name: visitorName, bio: '', photo: '', following: [], followers: [], nameChangedAt: Date.now() };
+  const profile = snap.data() || { name: visitorName, bio: '', photo: '', following: [], followers: [], likes: [], nameChangedAt: Date.now(), nicknameChangedAt: null };
   let pendingPhoto = profile.photo || '';
 
   const followingCount = (profile.following || []).length;
   const followersCount = (profile.followers || []).length;
 
-  const daysSinceChange = Math.floor((Date.now() - (profile.nameChangedAt || 0)) / 86400000);
-  const daysLeft = Math.max(0, 30 - daysSinceChange);
-  const nameLocked = daysLeft > 0;
+  const daysSinceNameChange = Math.floor((Date.now() - (profile.nameChangedAt || 0)) / 86400000);
+  const nameDaysLeft = Math.max(0, 30 - daysSinceNameChange);
+  const nameLocked = nameDaysLeft > 0;
+
+  const daysSinceNickChange = profile.nicknameChangedAt ? Math.floor((Date.now() - profile.nicknameChangedAt) / 86400000) : Infinity;
+  const nickDaysLeft = Math.max(0, 90 - daysSinceNickChange);
+  const nicknameLocked = nickDaysLeft > 0;
 
   profileModal.innerHTML = `
     <div class="modal-title">👤 Meu Perfil</div>
@@ -621,10 +638,10 @@ async function openProfileModal(){
       <span><b style="color:var(--text);">${followersCount}</b> seguidores</span>
       <span><b style="color:var(--text);">${followingCount}</b> seguindo</span>
     </div>
-    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Nome ${nameLocked ? `(pode mudar em ${daysLeft} dia${daysLeft === 1 ? '' : 's'})` : ''}</div>
+    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Nome ${nameLocked ? `(pode mudar em ${nameDaysLeft} dia${nameDaysLeft === 1 ? '' : 's'})` : ''}</div>
     <input type="text" class="quiz-input" id="profileNameInput" value="${profile.name || ''}" style="margin-bottom:14px;" ${nameLocked ? 'disabled' : ''}>
-    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Apelido</div>
-    <input type="text" class="quiz-input" id="profileNicknameInput" value="${profile.nickname || ''}" placeholder="Um apelido, se quiser" style="margin-bottom:14px;">
+    <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Apelido ${nicknameLocked ? `(pode mudar em ${nickDaysLeft} dia${nickDaysLeft === 1 ? '' : 's'})` : ''}</div>
+    <input type="text" class="quiz-input" id="profileNicknameInput" value="${profile.nickname || ''}" placeholder="Um apelido, se quiser" style="margin-bottom:14px;" ${nicknameLocked ? 'disabled' : ''}>
     <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Bio</div>
     <textarea class="quiz-input mystery-textarea" id="profileBioInput" placeholder="Conta um pouco sobre você...">${profile.bio || ''}</textarea>
     <div id="profileNameError" style="color:var(--accent); font-size:12.5px; min-height:16px; margin-top:8px;"></div>
@@ -644,32 +661,54 @@ async function openProfileModal(){
     preview.style.display = 'block';
   });
   document.getElementById('salvarProfileBtn').addEventListener('click', async () => {
+    const saveBtn = document.getElementById('salvarProfileBtn');
     const nameInputEl = document.getElementById('profileNameInput');
     const newName = nameInputEl.value.trim() || 'Sem nome';
-    const nickname = document.getElementById('profileNicknameInput').value.trim();
+    const newNickname = document.getElementById('profileNicknameInput').value.trim();
     const bio = document.getElementById('profileBioInput').value.trim();
     const errorBox = document.getElementById('profileNameError');
     errorBox.textContent = '';
 
     let finalName = profile.name;
     let finalNameChangedAt = profile.nameChangedAt || Date.now();
-
     if(!nameLocked && newName !== profile.name){
       finalName = newName;
       finalNameChangedAt = Date.now();
     } else if(nameLocked && newName !== profile.name){
-      errorBox.textContent = `Você só pode mudar o nome de novo em ${daysLeft} dia${daysLeft === 1 ? '' : 's'}.`;
+      errorBox.textContent = `Você só pode mudar o nome de novo em ${nameDaysLeft} dia${nameDaysLeft === 1 ? '' : 's'}.`;
       return;
+    }
+
+    let finalNickname = profile.nickname || '';
+    let finalNicknameChangedAt = profile.nicknameChangedAt || null;
+    if(newNickname !== (profile.nickname || '')){
+      if(nicknameLocked){
+        errorBox.textContent = `Você só pode mudar o apelido de novo em ${nickDaysLeft} dia${nickDaysLeft === 1 ? '' : 's'}.`;
+        return;
+      }
+      if(newNickname){
+        saveBtn.disabled = true;
+        const taken = await isNicknameTaken(newNickname, currentUid);
+        saveBtn.disabled = false;
+        if(taken){
+          errorBox.textContent = 'Esse apelido já está em uso por outra pessoa.';
+          return;
+        }
+      }
+      finalNickname = newNickname;
+      finalNicknameChangedAt = Date.now();
     }
 
     await setDoc(doc(db, 'users', currentUid), {
       name: finalName,
-      nickname,
+      nickname: finalNickname,
       bio,
       photo: pendingPhoto,
       following: profile.following || [],
       followers: profile.followers || [],
+      likes: profile.likes || [],
       nameChangedAt: finalNameChangedAt,
+      nicknameChangedAt: finalNicknameChangedAt,
       createdAt: profile.createdAt || Date.now()
     });
     visitorName = finalName;
@@ -702,6 +741,22 @@ function openSearchModal(){
 }
 document.getElementById('searchBtn').addEventListener('click', openSearchModal);
 searchOverlay.addEventListener('click', (e) => { if(e.target === searchOverlay) searchOverlay.classList.remove('show'); });
+
+async function toggleFollow(uid, name, isFollowing){
+  const myRef = doc(db, 'users', currentUid);
+  const theirRef = doc(db, 'users', uid);
+  if(isFollowing){
+    const mySnap = await getDoc(myRef);
+    const newFollowing = ((mySnap.data() && mySnap.data().following) || []).filter(f => f.uid !== uid);
+    await updateDoc(myRef, { following: newFollowing });
+    const theirSnap = await getDoc(theirRef);
+    const newFollowers = ((theirSnap.data() && theirSnap.data().followers) || []).filter(f => f.uid !== currentUid);
+    await updateDoc(theirRef, { followers: newFollowers });
+  } else {
+    await updateDoc(myRef, { following: arrayUnion({ uid, name }) });
+    await updateDoc(theirRef, { followers: arrayUnion({ uid: currentUid, name: visitorName }) });
+  }
+}
 
 async function searchUsers(){
   const term = document.getElementById('searchUserInput').value.trim().toLowerCase();
@@ -743,7 +798,7 @@ async function searchUsers(){
           <div style="color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${m.bio || ''}</div>
         </div>
       </div>
-      <button class="btn-primary add-friend-btn" data-uid="${m.uid}" data-name="${m.name}" style="padding:8px 14px; font-size:12.5px; width:auto; flex-shrink:0;" ${myFollowingIds.includes(m.uid) ? 'disabled' : ''}>${myFollowingIds.includes(m.uid) ? '✓ Seguindo' : '➕ Seguir'}</button>
+      <button class="btn-primary add-friend-btn" data-uid="${m.uid}" data-name="${m.name}" data-following="${myFollowingIds.includes(m.uid)}" style="padding:8px 14px; font-size:12.5px; width:auto; flex-shrink:0;">${myFollowingIds.includes(m.uid) ? '✓ Seguindo' : '➕ Seguir'}</button>
     </div>
   `).join('');
 
@@ -755,10 +810,12 @@ async function searchUsers(){
     btn.addEventListener('click', async () => {
       const uid = btn.dataset.uid;
       const name = btn.dataset.name;
+      const isFollowing = btn.dataset.following === 'true';
       btn.disabled = true;
-      await updateDoc(doc(db, 'users', currentUid), { following: arrayUnion({ uid, name }) });
-      await updateDoc(doc(db, 'users', uid), { followers: arrayUnion({ uid: currentUid, name: visitorName }) });
-      btn.textContent = '✓ Seguindo';
+      await toggleFollow(uid, name, isFollowing);
+      btn.dataset.following = (!isFollowing).toString();
+      btn.textContent = !isFollowing ? '✓ Seguindo' : '➕ Seguir';
+      btn.disabled = false;
     });
   });
 }
@@ -773,6 +830,9 @@ async function openViewProfile(uid){
   const isFollowing = myFollowing.some(f => f.uid === uid);
   const followersCount = (data.followers || []).length;
   const followingCount = (data.following || []).length;
+  const likes = data.likes || [];
+  const isLiked = likes.some(l => l.uid === currentUid);
+  const likesCount = likes.length;
 
   viewProfileModal.innerHTML = `
     <div style="text-align:center;">
@@ -784,20 +844,32 @@ async function openViewProfile(uid){
       <div style="display:flex; justify-content:center; gap:28px; margin-bottom:20px;">
         <div><b style="font-size:16px; display:block;">${followersCount}</b><span style="color:var(--muted); font-size:12px;">seguidores</span></div>
         <div><b style="font-size:16px; display:block;">${followingCount}</b><span style="color:var(--muted); font-size:12px;">seguindo</span></div>
+        <div><b style="font-size:16px; display:block;">${likesCount}</b><span style="color:var(--muted); font-size:12px;">curtidas</span></div>
       </div>
-      <button class="btn-primary" id="viewProfileFollowBtn" style="width:100%;" ${isFollowing ? 'disabled' : ''}>${isFollowing ? '✓ Seguindo' : '➕ Seguir'}</button>
+      <button class="btn-primary" id="viewProfileFollowBtn" data-following="${isFollowing}" style="width:100%;">${isFollowing ? '✓ Seguindo' : '➕ Seguir'}</button>
+      <button class="btn-ghost" id="viewProfileLikeBtn" style="width:100%; margin-top:10px;" ${isLiked ? 'disabled' : ''}>${isLiked ? '❤️ Curtido' : '🤍 Curtir perfil'}</button>
       <button class="btn-ghost" id="fecharViewProfileBtn" style="width:100%; margin-top:10px;">Fechar</button>
     </div>
   `;
   viewProfileOverlay.classList.add('show');
   document.getElementById('fecharViewProfileBtn').addEventListener('click', () => viewProfileOverlay.classList.remove('show'));
-  if(!isFollowing){
-    document.getElementById('viewProfileFollowBtn').addEventListener('click', async () => {
-      await updateDoc(doc(db, 'users', currentUid), { following: arrayUnion({ uid, name: data.name }) });
-      await updateDoc(doc(db, 'users', uid), { followers: arrayUnion({ uid: currentUid, name: visitorName }) });
-      const btn = document.getElementById('viewProfileFollowBtn');
-      btn.textContent = '✓ Seguindo';
+
+  document.getElementById('viewProfileFollowBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('viewProfileFollowBtn');
+    const following = btn.dataset.following === 'true';
+    btn.disabled = true;
+    await toggleFollow(uid, data.name, following);
+    btn.dataset.following = (!following).toString();
+    btn.textContent = !following ? '✓ Seguindo' : '➕ Seguir';
+    btn.disabled = false;
+  });
+
+  if(!isLiked){
+    document.getElementById('viewProfileLikeBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('viewProfileLikeBtn');
       btn.disabled = true;
+      await updateDoc(doc(db, 'users', uid), { likes: arrayUnion({ uid: currentUid }) });
+      btn.textContent = '❤️ Curtido';
     });
   }
 }
