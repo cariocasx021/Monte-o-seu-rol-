@@ -253,6 +253,17 @@
   </div>
 </div>
 
+<div class="overlay" id="introOverlay" style="z-index:290;">
+  <div class="modal" style="max-width:460px; text-align:center;">
+    <div style="font-size:34px; margin-bottom:10px;">🖤</div>
+    <div class="modal-title" style="justify-content:center;">Victor Experience™</div>
+    <p style="color:#e6dee2; font-size:14.5px; line-height:1.75; margin:16px 0 26px; font-style:italic;">
+      Na Victor Experience™, cada encontro é pensado para ser muito mais do que um simples rolê. Aqui, cada detalhe é planejado para criar momentos especiais, boas conversas, muitas risadas e lembranças que valem a pena guardar. Nossa missão é transformar um encontro comum em uma experiência única, cheia de carinho, surpresas e conexões verdadeiras. Porque algumas histórias merecem começar de um jeito inesquecível.
+    </p>
+    <button class="btn-primary" id="introEnterBtn" style="width:100%; opacity:0; pointer-events:none; transition: opacity .4s ease;">Entrar no site ❤️</button>
+  </div>
+</div>
+
 <canvas id="particles"></canvas>
 
 <div class="topbar">
@@ -376,6 +387,19 @@ let currentUid = null;
 let authMode = 'login'; // 'login' ou 'signup'
 
 const authGate = document.getElementById('authGate');
+
+const introOverlay = document.getElementById('introOverlay');
+const introEnterBtn = document.getElementById('introEnterBtn');
+function showIntro(){
+  introOverlay.classList.add('show');
+  introEnterBtn.style.opacity = '0';
+  introEnterBtn.style.pointerEvents = 'none';
+  setTimeout(() => {
+    introEnterBtn.style.opacity = '1';
+    introEnterBtn.style.pointerEvents = 'auto';
+  }, 3000);
+}
+introEnterBtn.addEventListener('click', () => introOverlay.classList.remove('show'));
 const authTitle = document.getElementById('authTitle');
 const authSubtitle = document.getElementById('authSubtitle');
 const authNameInput = document.getElementById('authNameInput');
@@ -509,7 +533,7 @@ function renderNotifications(profileData){
   });
 }
 
-function renderReceivedInvites(){
+async function renderReceivedInvites(){
   const box = document.getElementById('receivedInvitesList');
   if(!box) return;
   const pending = receivedInvites.filter(i => i.status === 'pending');
@@ -517,12 +541,21 @@ function renderReceivedInvites(){
     box.innerHTML = `<p style="color:var(--muted); font-size:13px;">Nenhum convite de encontro por enquanto.</p>`;
     return;
   }
-  box.innerHTML = pending.map(inv => {
+  const withProfiles = await Promise.all(pending.map(async inv => {
+    const snap = await getDoc(doc(db, 'users', inv.fromUid));
+    const prof = snap.data() || {};
+    return { ...inv, fromNickname: prof.nickname || '' };
+  }));
+
+  box.innerHTML = withProfiles.map(inv => {
     const formatted = buildEncounterFromRaw(inv.planName, inv.dateStr, inv.timeStr);
     return `
       <div style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
-        <div style="font-size:14px; margin-bottom:8px;"><b>${inv.fromName}</b> te convidou pra <b>${inv.planName}</b><br>
-        <span style="color:var(--muted); font-size:12.5px;">📅 ${formatted.dayLabel} · 🕔 ${formatted.timeLabel}</span></div>
+        <div style="font-size:14px; margin-bottom:8px;">
+          <span class="invite-from-trigger" data-uid="${inv.fromUid}" style="cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);"><b>${inv.fromNickname ? '"' + inv.fromNickname + '"' : inv.fromName}</b></span>
+          te convidou pra <b>${inv.planName}</b><br>
+          <span style="color:var(--muted); font-size:12.5px;">📅 ${formatted.dayLabel} · 🕔 ${formatted.timeLabel}</span>
+        </div>
         <div style="display:flex; gap:8px;">
           <button class="btn-ghost invite-decline-btn" data-id="${inv.id}" style="flex:1; padding:8px; font-size:12.5px;">Recusar</button>
           <button class="btn-primary invite-accept-btn" data-id="${inv.id}" style="flex:1; padding:8px; font-size:12.5px;">Aceitar</button>
@@ -531,6 +564,9 @@ function renderReceivedInvites(){
     `;
   }).join('');
 
+  box.querySelectorAll('.invite-from-trigger').forEach(el => {
+    el.addEventListener('click', () => openViewProfile(el.dataset.uid));
+  });
   box.querySelectorAll('.invite-accept-btn').forEach(btn => {
     btn.addEventListener('click', () => respondInvite(btn.dataset.id, true));
   });
@@ -539,7 +575,7 @@ function renderReceivedInvites(){
   });
 }
 
-function renderSentInvites(){
+async function renderSentInvites(){
   const box = document.getElementById('sentInvitesList');
   if(!box) return;
   const resolved = sentInvites.filter(i => i.status !== 'pending');
@@ -548,18 +584,30 @@ function renderSentInvites(){
     box.innerHTML = `<p style="color:var(--muted); font-size:13px;">Você ainda não enviou nenhum convite.</p>`;
     return;
   }
+  const resolvedWithProfiles = await Promise.all(resolved.slice().reverse().map(async inv => {
+    const snap = await getDoc(doc(db, 'users', inv.toUid));
+    const prof = snap.data() || {};
+    return { ...inv, toNickname: prof.nickname || '' };
+  }));
+
   let html = '';
   if(pendingCount){
     html += `<p style="color:var(--muted); font-size:13px;">${pendingCount} convite${pendingCount === 1 ? '' : 's'} aguardando resposta.</p>`;
   }
-  html += resolved.slice().reverse().map(inv => `
+  html += resolvedWithProfiles.map(inv => `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
-      <div style="font-size:13.5px;"><b>${inv.toName}</b> ${inv.status === 'accepted' ? 'aceitou' : 'recusou'} o convite pra ${inv.planName}</div>
+      <div style="font-size:13.5px;">
+        <span class="invite-to-trigger" data-uid="${inv.toUid}" style="cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);"><b>${inv.toNickname ? '"' + inv.toNickname + '"' : inv.toName}</b></span>
+        ${inv.status === 'accepted' ? 'aceitou' : 'recusou'} o convite pra ${inv.planName}
+      </div>
       <button class="btn-ghost dismiss-invite-btn" data-id="${inv.id}" style="padding:6px 10px; font-size:12px; width:auto; flex-shrink:0;">OK</button>
     </div>
   `).join('');
   box.innerHTML = html;
 
+  box.querySelectorAll('.invite-to-trigger').forEach(el => {
+    el.addEventListener('click', () => openViewProfile(el.dataset.uid));
+  });
   box.querySelectorAll('.dismiss-invite-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       await deleteDoc(doc(db, 'invites', btn.dataset.id));
@@ -620,6 +668,7 @@ onAuthStateChanged(auth, async (user) => {
     authGate.classList.remove('show');
     const tagline = document.querySelector('.tagline');
     if(tagline) tagline.textContent = 'Oi, ' + visitorName + '! Experiências inesquecíveis.';
+    showIntro();
 
     if(myProfileUnsub) myProfileUnsub();
     myProfileUnsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
@@ -1307,11 +1356,13 @@ const QUIZ = [
 ];
 let quizStep = 0;
 let quizAnswers = {};
+let quizDateTime = {};
+let quizCompat = 0;
 const quizOverlay = document.getElementById('quizOverlay');
 const quizModal = document.getElementById('quizModal');
 
 document.getElementById('roleBtn').addEventListener('click', () => {
-  quizStep = 0; quizAnswers = {};
+  quizStep = 0; quizAnswers = {}; quizDateTime = {};
   quizOverlay.classList.add('show');
   renderQuizStep();
 });
@@ -1348,16 +1399,7 @@ function renderQuizStep(){
 
 function renderQuizResult(){
   const compat = 90 + Math.floor(Math.random()*10);
-  sendToEmail('Rolê montado pelo quiz', {
-    nome: visitorName,
-    lugar: quizAnswers.place,
-    horario: quizAnswers.time,
-    comida: quizAnswers.food,
-    clima: quizAnswers.mood,
-    estilo: quizAnswers.style,
-    especial: quizAnswers.special,
-    compatibilidade: compat + '%'
-  });
+  quizCompat = compat;
 
   quizModal.innerHTML = `
     <div class="result-card">
@@ -1374,12 +1416,130 @@ function renderQuizResult(){
       </div>
       <div class="modal-actions">
         <button class="btn-ghost" id="refazerBtn">Refazer</button>
-        <button class="btn-primary" id="fecharQuizBtn">Fechar</button>
+        <button class="btn-primary" id="continuarQuizBtn">Continuar</button>
       </div>
     </div>
   `;
   document.getElementById('refazerBtn').addEventListener('click', () => { quizStep=0; quizAnswers={}; renderQuizStep(); });
-  document.getElementById('fecharQuizBtn').addEventListener('click', () => quizOverlay.classList.remove('show'));
+  document.getElementById('continuarQuizBtn').addEventListener('click', () => renderQuizDateTimeStep());
+}
+
+function renderQuizDateTimeStep(){
+  quizModal.innerHTML = `
+    <div class="modal-title">📅 Quando vai ser?</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Escolha o dia e o horário:</div>
+    <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+      <input type="date" class="quiz-input" id="quizDayInput" value="${quizDateTime.day || ''}">
+      <input type="time" class="quiz-input" id="quizTimeInput" value="${quizDateTime.time || ''}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="voltarQuizDateBtn">⬅ Voltar</button>
+      <button class="btn-primary" id="continuarQuizDateBtn">Continuar</button>
+    </div>
+  `;
+  document.getElementById('voltarQuizDateBtn').addEventListener('click', renderQuizResult);
+  document.getElementById('continuarQuizDateBtn').addEventListener('click', () => {
+    const day = document.getElementById('quizDayInput').value;
+    const time = document.getElementById('quizTimeInput').value;
+    if(!day || !time){
+      if(!day) document.getElementById('quizDayInput').style.borderColor = 'var(--accent)';
+      if(!time) document.getElementById('quizTimeInput').style.borderColor = 'var(--accent)';
+      return;
+    }
+    quizDateTime = { day, time };
+    renderQuizWithStep();
+  });
+}
+
+async function renderQuizWithStep(){
+  const meSnap = await getDoc(doc(db, 'users', currentUid));
+  const meData = meSnap.data() || {};
+  const connMap = new Map();
+  (meData.following || []).forEach(f => connMap.set(f.uid, f.name));
+  (meData.followers || []).forEach(f => connMap.set(f.uid, f.name));
+  const connections = [...connMap.entries()].map(([uid, name]) => ({ uid, name }));
+
+  if(!connections.length){
+    quizModal.innerHTML = `
+      <div class="modal-title">💌 Com quem você vai?</div>
+      <p style="color:var(--muted); font-size:13.5px;">Você ainda não segue nem é seguida por ninguém. Siga alguém em "Encontrar Pessoas" (🔍) antes de enviar o convite.</p>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="voltarQuizWithBtn" style="width:100%;">⬅ Voltar</button>
+      </div>
+    `;
+    document.getElementById('voltarQuizWithBtn').addEventListener('click', renderQuizDateTimeStep);
+    return;
+  }
+
+  quizModal.innerHTML = `
+    <div class="modal-title">💌 Com quem você vai?</div>
+    <div style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">Escolha uma pessoa da sua lista:</div>
+    <div class="contract-box" id="quizWithBox">
+      ${connections.map(c => `<label class="contract-item"><input type="radio" name="quizWithPerson" class="quiz-with-check" value="${c.uid}" data-name="${c.name}" ${quizDateTime.withUid === c.uid ? 'checked' : ''}> ${c.name}</label>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="voltarQuizWithBtn">⬅ Voltar</button>
+      <button class="btn-primary" id="enviarQuizInviteBtn" ${quizDateTime.withUid ? '' : 'disabled'} style="opacity:${quizDateTime.withUid ? '1' : '0.5'};">Enviar convite ❤️</button>
+    </div>
+  `;
+  document.getElementById('voltarQuizWithBtn').addEventListener('click', renderQuizDateTimeStep);
+  const withChecks = quizModal.querySelectorAll('.quiz-with-check');
+  const enviarBtn = document.getElementById('enviarQuizInviteBtn');
+  withChecks.forEach(c => c.addEventListener('change', () => {
+    enviarBtn.disabled = false;
+    enviarBtn.style.opacity = '1';
+  }));
+  enviarBtn.addEventListener('click', () => {
+    const checked = quizModal.querySelector('.quiz-with-check:checked');
+    if(!checked) return;
+    quizDateTime.withUid = checked.value;
+    quizDateTime.withName = checked.dataset.name;
+    sendQuizInvite();
+  });
+}
+
+async function sendQuizInvite(){
+  burstConfetti();
+  const prefs = [
+    '📍 ' + quizAnswers.place,
+    '🕒 ' + quizAnswers.time,
+    '🍽️ ' + quizAnswers.food,
+    '🎶 ' + quizAnswers.mood,
+    '💰 ' + quizAnswers.style,
+    '✨ ' + quizAnswers.special
+  ];
+  const invite = {
+    fromUid: currentUid,
+    fromName: visitorName,
+    toUid: quizDateTime.withUid,
+    toName: quizDateTime.withName,
+    planName: 'Rolê personalizado (quiz)',
+    dateStr: quizDateTime.day,
+    timeStr: quizDateTime.time,
+    prefs,
+    status: 'pending',
+    createdAt: Date.now()
+  };
+  await addDoc(collection(db, 'invites'), invite);
+  const formatted = buildEncounterFromRaw(invite.planName, invite.dateStr, invite.timeStr);
+  sendToEmail('Novo convite de rolê (quiz)', {
+    de: visitorName,
+    para: quizDateTime.withName,
+    dia: formatted.dayLabel,
+    horario: formatted.timeLabel,
+    compatibilidade: quizCompat + '%'
+  });
+  quizModal.innerHTML = `
+    <div class="success-wrap">
+      <div style="font-size:40px;">💌</div>
+      <h3>Convite enviado!</h3>
+      <p>Assim que <b>${quizDateTime.withName}</b> aceitar ou recusar, a resposta aparece na central de notificações (🔔).</p>
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn-primary" id="fecharQuizFinalBtn" style="width:100%;">Fechar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('fecharQuizFinalBtn').addEventListener('click', () => quizOverlay.classList.remove('show'));
 }
 
 /* ---------------- Particles background ---------------- */
