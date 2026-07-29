@@ -182,6 +182,29 @@
   .stars-input span{ transition: color .15s ease; }
   .stars-input span.filled{ color: var(--gold); }
 
+  .chat-messages{
+    flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px;
+    padding:4px 2px; margin-bottom:12px;
+  }
+  .chat-bubble{
+    max-width:75%; padding:9px 13px; border-radius:14px; font-size:14px; line-height:1.4;
+    word-wrap:break-word;
+  }
+  .chat-bubble.me{
+    align-self:flex-end; background: linear-gradient(120deg, var(--accent), var(--accent2)); color:#fff;
+    border-bottom-right-radius:4px;
+  }
+  .chat-bubble.them{
+    align-self:flex-start; background: rgba(255,255,255,0.08); color:var(--text);
+    border-bottom-left-radius:4px;
+  }
+  .chat-input-row{ display:flex; gap:8px; }
+  .chat-input-row input{ flex:1; }
+  .chat-conv-item{
+    display:flex; align-items:center; gap:12px; padding:12px 0;
+    border-bottom:1px solid rgba(255,255,255,0.08); cursor:pointer;
+  }
+
   .contract-box{ display:flex; flex-direction:column; gap:14px; margin-bottom:20px; }
   .contract-item{
     display:flex; align-items:center; gap:10px; font-size:14.5px; cursor:pointer;
@@ -270,6 +293,9 @@
   <span class="home-pill">🖤 Página inicial</span>
   <div style="display:flex; gap:8px;">
     <button class="music-btn" id="searchBtn" title="Buscar pessoas">🔍</button>
+    <button class="music-btn" id="chatsBtn" title="Mensagens" style="position:relative;">
+      💬<span id="chatsBadge" style="display:none; position:absolute; top:2px; right:2px; width:9px; height:9px; border-radius:50%; background:var(--accent);"></span>
+    </button>
     <button class="music-btn" id="notifBtn" title="Notificações" style="position:relative;">
       🔔<span id="notifBadge" style="display:none; position:absolute; top:2px; right:2px; width:9px; height:9px; border-radius:50%; background:var(--accent);"></span>
     </button>
@@ -292,6 +318,16 @@
 <!-- Notifications modal -->
 <div class="overlay" id="notifOverlay">
   <div class="modal" id="notifModal"></div>
+</div>
+
+<!-- Chats inbox modal -->
+<div class="overlay" id="chatsOverlay">
+  <div class="modal" id="chatsModal"></div>
+</div>
+
+<!-- Individual chat modal -->
+<div class="overlay" id="chatOverlay">
+  <div class="modal" id="chatModal" style="max-width:420px; display:flex; flex-direction:column; height:80vh; max-height:600px; padding:20px 20px 16px;"></div>
 </div>
 
 <!-- View profile modal (perfil de outra pessoa) -->
@@ -367,7 +403,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, getDocs, arrayUnion, query, where, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, getDocs, arrayUnion, query, where, addDoc, deleteDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -698,6 +734,8 @@ onAuthStateChanged(auth, async (user) => {
       snap.forEach(d => sentInvites.push({ id: d.id, ...d.data() }));
       renderSentInvites();
     });
+
+    startChatsListener();
   } else {
     currentUid = null;
     visitorName = '';
@@ -709,6 +747,8 @@ onAuthStateChanged(auth, async (user) => {
     if(myProfileUnsub){ myProfileUnsub(); myProfileUnsub = null; }
     if(receivedInvitesUnsub){ receivedInvitesUnsub(); receivedInvitesUnsub = null; }
     if(sentInvitesUnsub){ sentInvitesUnsub(); sentInvitesUnsub = null; }
+    stopChatsListener();
+    if(currentChatUnsub){ currentChatUnsub(); currentChatUnsub = null; }
     receivedInvites = [];
     sentInvites = [];
     lastEncounter = null;
@@ -717,6 +757,8 @@ onAuthStateChanged(auth, async (user) => {
     if(box) box.innerHTML = '';
     const badge = document.getElementById('notifBadge');
     if(badge) badge.style.display = 'none';
+    const chatsBadge = document.getElementById('chatsBadge');
+    if(chatsBadge) chatsBadge.style.display = 'none';
   }
 });
 
@@ -987,6 +1029,17 @@ async function searchUsers(){
 }
 
 /* ---------------- Ver perfil de outra pessoa (estilo Instagram) ---------------- */
+async function toggleLike(uid, isLiked){
+  const theirRef = doc(db, 'users', uid);
+  if(isLiked){
+    const snap = await getDoc(theirRef);
+    const newLikes = ((snap.data() && snap.data().likes) || []).filter(l => l.uid !== currentUid);
+    await updateDoc(theirRef, { likes: newLikes });
+  } else {
+    await updateDoc(theirRef, { likes: arrayUnion({ uid: currentUid }) });
+  }
+}
+
 async function openViewProfile(uid){
   const snap = await getDoc(doc(db, 'users', uid));
   if(!snap.exists()) return;
@@ -1010,15 +1063,20 @@ async function openViewProfile(uid){
       <div style="display:flex; justify-content:center; gap:28px; margin-bottom:20px;">
         <div><b style="font-size:16px; display:block;">${followersCount}</b><span style="color:var(--muted); font-size:12px;">seguidores</span></div>
         <div><b style="font-size:16px; display:block;">${followingCount}</b><span style="color:var(--muted); font-size:12px;">seguindo</span></div>
-        <div><b style="font-size:16px; display:block;">${likesCount}</b><span style="color:var(--muted); font-size:12px;">curtidas</span></div>
+        <div><b style="font-size:16px; display:block;" id="viewProfileLikesCount">${likesCount}</b><span style="color:var(--muted); font-size:12px;">curtidas</span></div>
       </div>
       <button class="btn-primary" id="viewProfileFollowBtn" data-following="${isFollowing}" style="width:100%;">${isFollowing ? '✓ Seguindo' : '➕ Seguir'}</button>
-      <button class="btn-ghost" id="viewProfileLikeBtn" style="width:100%; margin-top:10px;" ${isLiked ? 'disabled' : ''}>${isLiked ? '❤️ Curtido' : '🤍 Curtir perfil'}</button>
+      <button class="btn-ghost" id="viewProfileMsgBtn" style="width:100%; margin-top:10px;">💬 Mensagem</button>
+      <button class="btn-ghost" id="viewProfileLikeBtn" data-liked="${isLiked}" style="width:100%; margin-top:10px;">${isLiked ? '❤️ Curtido' : '🤍 Curtir perfil'}</button>
       <button class="btn-ghost" id="fecharViewProfileBtn" style="width:100%; margin-top:10px;">Fechar</button>
     </div>
   `;
   viewProfileOverlay.classList.add('show');
   document.getElementById('fecharViewProfileBtn').addEventListener('click', () => viewProfileOverlay.classList.remove('show'));
+  document.getElementById('viewProfileMsgBtn').addEventListener('click', () => {
+    viewProfileOverlay.classList.remove('show');
+    openChat(uid, data.name);
+  });
 
   document.getElementById('viewProfileFollowBtn').addEventListener('click', async () => {
     const btn = document.getElementById('viewProfileFollowBtn');
@@ -1030,16 +1088,184 @@ async function openViewProfile(uid){
     btn.disabled = false;
   });
 
-  if(!isLiked){
-    document.getElementById('viewProfileLikeBtn').addEventListener('click', async () => {
-      const btn = document.getElementById('viewProfileLikeBtn');
-      btn.disabled = true;
-      await updateDoc(doc(db, 'users', uid), { likes: arrayUnion({ uid: currentUid }) });
-      btn.textContent = '❤️ Curtido';
-    });
-  }
+  document.getElementById('viewProfileLikeBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('viewProfileLikeBtn');
+    const liked = btn.dataset.liked === 'true';
+    const countEl = document.getElementById('viewProfileLikesCount');
+    btn.disabled = true;
+    await toggleLike(uid, liked);
+    btn.dataset.liked = (!liked).toString();
+    btn.textContent = !liked ? '❤️ Curtido' : '🤍 Curtir perfil';
+    countEl.textContent = Number(countEl.textContent) + (!liked ? 1 : -1);
+    btn.disabled = false;
+  });
 }
 viewProfileOverlay.addEventListener('click', (e) => { if(e.target === viewProfileOverlay) viewProfileOverlay.classList.remove('show'); });
+
+/* ---------------- Mensagens diretas (Direct) ---------------- */
+const chatsOverlay = document.getElementById('chatsOverlay');
+const chatsModal = document.getElementById('chatsModal');
+const chatOverlay = document.getElementById('chatOverlay');
+const chatModal = document.getElementById('chatModal');
+
+let myChatsUnsub = null;
+let myChats = [];
+let currentChatUnsub = null;
+let currentChatId = null;
+let currentChatWithUid = null;
+let currentChatWithName = null;
+
+function chatIdFor(uidA, uidB){
+  return [uidA, uidB].sort().join('_');
+}
+
+function startChatsListener(){
+  if(myChatsUnsub) myChatsUnsub();
+  myChatsUnsub = onSnapshot(query(collection(db, 'chats'), where('participants', 'array-contains', currentUid)), (snap) => {
+    myChats = [];
+    snap.forEach(d => myChats.push({ id: d.id, ...d.data() }));
+    myChats.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    renderChatsInbox();
+    updateChatsBadge();
+  });
+}
+function stopChatsListener(){
+  if(myChatsUnsub){ myChatsUnsub(); myChatsUnsub = null; }
+  myChats = [];
+}
+
+function updateChatsBadge(){
+  const badge = document.getElementById('chatsBadge');
+  if(!badge) return;
+  const hasUnread = myChats.some(c => c.lastSenderUid && c.lastSenderUid !== currentUid && !(c.readBy || []).includes(currentUid));
+  badge.style.display = hasUnread ? 'block' : 'none';
+}
+
+function renderChatsInbox(){
+  const box = document.getElementById('chatsList');
+  if(!box) return;
+  if(!myChats.length){
+    box.innerHTML = `<p style="color:var(--muted); font-size:13px;">Nenhuma conversa ainda. Manda uma mensagem pelo perfil de alguém pra começar.</p>`;
+    return;
+  }
+  box.innerHTML = myChats.map(c => {
+    const otherUid = (c.participants || []).find(p => p !== currentUid);
+    const otherName = (c.participantNames && c.participantNames[otherUid]) || 'Alguém';
+    const unread = c.lastSenderUid && c.lastSenderUid !== currentUid && !(c.readBy || []).includes(currentUid);
+    return `
+      <div class="chat-conv-item" data-uid="${otherUid}" data-name="${otherName}">
+        <div style="width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">👤</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:${unread ? '700' : '600'}; font-size:14.5px;">${otherName}</div>
+          <div style="color:${unread ? 'var(--text)' : 'var(--muted)'}; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${c.lastMessage || ''}</div>
+        </div>
+        ${unread ? '<span style="width:9px; height:9px; border-radius:50%; background:var(--accent); flex-shrink:0;"></span>' : ''}
+      </div>
+    `;
+  }).join('');
+  box.querySelectorAll('.chat-conv-item').forEach(el => {
+    el.addEventListener('click', () => {
+      chatsOverlay.classList.remove('show');
+      openChat(el.dataset.uid, el.dataset.name);
+    });
+  });
+}
+
+function openChatsInbox(){
+  chatsModal.innerHTML = `
+    <div class="modal-title">💬 Mensagens</div>
+    <div id="chatsList" style="margin-bottom:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="fecharChatsBtn" style="width:100%;">Fechar</button>
+    </div>
+  `;
+  chatsOverlay.classList.add('show');
+  renderChatsInbox();
+  document.getElementById('fecharChatsBtn').addEventListener('click', () => chatsOverlay.classList.remove('show'));
+}
+document.getElementById('chatsBtn').addEventListener('click', openChatsInbox);
+chatsOverlay.addEventListener('click', (e) => { if(e.target === chatsOverlay) chatsOverlay.classList.remove('show'); });
+
+async function openChat(otherUid, otherName){
+  currentChatWithUid = otherUid;
+  currentChatWithName = otherName;
+  currentChatId = chatIdFor(currentUid, otherUid);
+
+  chatModal.innerHTML = `
+    <div class="modal-title" style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+      <span id="chatHeaderName" style="cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);">${otherName}</span>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-row">
+      <input type="text" class="quiz-input" id="chatInput" placeholder="Escreva uma mensagem...">
+      <button class="btn-primary" id="chatSendBtn" style="width:auto; padding:0 16px;">Enviar</button>
+    </div>
+  `;
+  chatOverlay.classList.add('show');
+
+  document.getElementById('chatHeaderName').addEventListener('click', () => {
+    chatOverlay.classList.remove('show');
+    openViewProfile(otherUid);
+  });
+
+  const chatRef = doc(db, 'chats', currentChatId);
+  const chatSnap = await getDoc(chatRef);
+  if(!chatSnap.exists()){
+    await setDoc(chatRef, {
+      participants: [currentUid, otherUid],
+      participantNames: { [currentUid]: visitorName, [otherUid]: otherName },
+      lastMessage: '',
+      lastSenderUid: null,
+      readBy: [currentUid, otherUid],
+      updatedAt: Date.now()
+    });
+  } else {
+    await updateDoc(chatRef, { readBy: arrayUnion(currentUid) });
+  }
+
+  if(currentChatUnsub) currentChatUnsub();
+  currentChatUnsub = onSnapshot(
+    query(collection(db, 'chats', currentChatId, 'messages'), orderBy('createdAt', 'asc')),
+    (snap) => {
+      const messagesBox = document.getElementById('chatMessages');
+      if(!messagesBox) return;
+      messagesBox.innerHTML = snap.docs.map(d => {
+        const m = d.data();
+        const mine = m.senderUid === currentUid;
+        return `<div class="chat-bubble ${mine ? 'me' : 'them'}">${m.text}</div>`;
+      }).join('');
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
+  );
+
+  const sendMessage = async () => {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if(!text) return;
+    input.value = '';
+    await addDoc(collection(db, 'chats', currentChatId, 'messages'), {
+      senderUid: currentUid,
+      text,
+      createdAt: Date.now()
+    });
+    await updateDoc(chatRef, {
+      lastMessage: text,
+      lastSenderUid: currentUid,
+      readBy: [currentUid],
+      updatedAt: Date.now(),
+      participantNames: { [currentUid]: visitorName, [otherUid]: otherName }
+    });
+  };
+  document.getElementById('chatSendBtn').addEventListener('click', sendMessage);
+  document.getElementById('chatInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMessage(); });
+  document.getElementById('chatInput').focus();
+}
+chatOverlay.addEventListener('click', (e) => {
+  if(e.target === chatOverlay){
+    chatOverlay.classList.remove('show');
+    if(currentChatUnsub){ currentChatUnsub(); currentChatUnsub = null; }
+  }
+});
 
 /* ---------------- Plans data ---------------- */
 const PLANS = [
