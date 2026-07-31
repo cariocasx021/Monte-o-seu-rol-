@@ -981,6 +981,7 @@ async function searchUsers(){
   const myFollowingIds = myFollowing.map(f => f.uid);
 
   const matches = [];
+  let usedNameFallback = false;
   allUsersSnap.forEach(d => {
     if(d.id === currentUid) return;
     const data = d.data();
@@ -991,11 +992,33 @@ async function searchUsers(){
   });
 
   if(!matches.length){
-    resultsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Ninguém encontrado com esse apelido.</p>`;
+    usedNameFallback = true;
+    allUsersSnap.forEach(d => {
+      if(d.id === currentUid) return;
+      const data = d.data();
+      const matchesName = (data.name || '').toLowerCase().includes(term);
+      if(matchesName){
+        matches.push({ uid: d.id, name: data.name, nickname: data.nickname, bio: data.bio, photo: data.photo });
+      }
+    });
+  }
+
+  if(!matches.length){
+    resultsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Ninguém encontrado com esse nome ou apelido.</p>`;
     return;
   }
 
-  resultsBox.innerHTML = matches.map(m => `
+  const freshMatches = await Promise.all(matches.map(async m => {
+    const freshSnap = await getDoc(doc(db, 'users', m.uid));
+    const freshData = freshSnap.data() || {};
+    return { ...m, bio: freshData.bio, photo: freshData.photo };
+  }));
+
+  const hint = usedNameFallback
+    ? `<p style="color:var(--muted); font-size:12.5px; margin-bottom:10px;">Nenhum apelido bateu — mostrando quem tem esse nome:</p>`
+    : '';
+
+  resultsBox.innerHTML = hint + freshMatches.map(m => `
     <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">
       <div class="view-profile-trigger" data-uid="${m.uid}" style="display:flex; align-items:center; gap:12px; flex:1; min-width:0; cursor:pointer;">
         ${m.photo
@@ -1174,6 +1197,12 @@ function renderChatsInbox(){
 function openChatsInbox(){
   chatsModal.innerHTML = `
     <div class="modal-title">💬 Mensagens</div>
+    <div style="display:flex; gap:10px; margin-bottom:16px;">
+      <input type="text" class="quiz-input" id="chatSearchInput" placeholder="Buscar pessoa pra conversar...">
+      <button class="btn-primary" id="chatSearchBtn" style="white-space:nowrap; width:auto; padding:0 18px;">Buscar</button>
+    </div>
+    <div id="chatSearchResults" style="margin-bottom:16px;"></div>
+    <div style="color:var(--muted); font-size:12.5px; font-weight:600; margin-bottom:8px;">Conversas</div>
     <div id="chatsList" style="margin-bottom:16px;"></div>
     <div class="modal-actions">
       <button class="btn-ghost" id="fecharChatsBtn" style="width:100%;">Fechar</button>
@@ -1182,9 +1211,72 @@ function openChatsInbox(){
   chatsOverlay.classList.add('show');
   renderChatsInbox();
   document.getElementById('fecharChatsBtn').addEventListener('click', () => chatsOverlay.classList.remove('show'));
+  document.getElementById('chatSearchBtn').addEventListener('click', searchUsersForChat);
+  document.getElementById('chatSearchInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') searchUsersForChat(); });
 }
 document.getElementById('chatsBtn').addEventListener('click', openChatsInbox);
 chatsOverlay.addEventListener('click', (e) => { if(e.target === chatsOverlay) chatsOverlay.classList.remove('show'); });
+
+async function searchUsersForChat(){
+  const term = document.getElementById('chatSearchInput').value.trim().toLowerCase();
+  const resultsBox = document.getElementById('chatSearchResults');
+  if(!term){ resultsBox.innerHTML = ''; return; }
+  resultsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Buscando...</p>`;
+
+  const allUsersSnap = await getDocs(collection(db, 'users'));
+  let matches = [];
+  allUsersSnap.forEach(d => {
+    if(d.id === currentUid) return;
+    const data = d.data();
+    if((data.nickname || '').toLowerCase().includes(term)){
+      matches.push({ uid: d.id, name: data.name, nickname: data.nickname, photo: data.photo });
+    }
+  });
+  let usedNameFallback = false;
+  if(!matches.length){
+    usedNameFallback = true;
+    allUsersSnap.forEach(d => {
+      if(d.id === currentUid) return;
+      const data = d.data();
+      if((data.name || '').toLowerCase().includes(term)){
+        matches.push({ uid: d.id, name: data.name, nickname: data.nickname, photo: data.photo });
+      }
+    });
+  }
+
+  if(!matches.length){
+    resultsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Ninguém encontrado com esse nome ou apelido.</p>`;
+    return;
+  }
+
+  const freshMatches = await Promise.all(matches.map(async m => {
+    const freshSnap = await getDoc(doc(db, 'users', m.uid));
+    const freshData = freshSnap.data() || {};
+    return { ...m, photo: freshData.photo };
+  }));
+
+  const hint = usedNameFallback
+    ? `<p style="color:var(--muted); font-size:12.5px; margin-bottom:8px;">Nenhum apelido bateu — mostrando quem tem esse nome:</p>`
+    : '';
+
+  resultsBox.innerHTML = hint + freshMatches.map(m => `
+    <div class="chat-conv-item" data-uid="${m.uid}" data-name="${m.name}">
+      ${m.photo
+        ? `<img src="${m.photo}" style="width:42px; height:42px; border-radius:50%; object-fit:cover;">`
+        : `<div style="width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:18px;">👤</div>`}
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:14.5px;">${m.name}${m.nickname ? ` <span style="color:var(--muted); font-weight:500;">"${m.nickname}"</span>` : ''}</div>
+      </div>
+    </div>
+  `).join('');
+
+  resultsBox.querySelectorAll('.chat-conv-item').forEach(el => {
+    el.addEventListener('click', () => {
+      chatsOverlay.classList.remove('show');
+      openChat(el.dataset.uid, el.dataset.name);
+    });
+  });
+}
 
 async function openChat(otherUid, otherName){
   currentChatWithUid = otherUid;
