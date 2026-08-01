@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Victor Experience™</title>
+<title>Viconnect'</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -198,8 +198,23 @@
     align-self:flex-start; background: rgba(255,255,255,0.08); color:var(--text);
     border-bottom-left-radius:4px;
   }
-  .chat-input-row{ display:flex; gap:8px; }
+  .chat-input-row{ display:flex; gap:8px; position:relative; }
   .chat-input-row input{ flex:1; }
+  .emoji-btn{
+    background:none; border:none; font-size:20px; cursor:pointer; padding:0 4px; flex-shrink:0;
+  }
+  .emoji-panel{
+    position:absolute; bottom:calc(100% + 8px); left:0; right:0;
+    background: var(--bg-card); border:1px solid rgba(255,255,255,0.1); border-radius:12px;
+    padding:10px; display:none; grid-template-columns:repeat(7, 1fr); gap:4px;
+    max-height:180px; overflow-y:auto; box-shadow:0 -8px 24px rgba(0,0,0,0.4); z-index:10;
+  }
+  .emoji-panel.show{ display:grid; }
+  .emoji-panel span{
+    font-size:20px; text-align:center; cursor:pointer; border-radius:8px; padding:4px 0;
+    transition: background .15s ease;
+  }
+  .emoji-panel span:hover{ background: rgba(255,255,255,0.08); }
   .chat-conv-item{
     display:flex; align-items:center; gap:12px; padding:12px 0;
     border-bottom:1px solid rgba(255,255,255,0.08); cursor:pointer;
@@ -279,9 +294,9 @@
 <div class="overlay" id="introOverlay" style="z-index:290;">
   <div class="modal" style="max-width:460px; text-align:center;">
     <div style="font-size:34px; margin-bottom:10px;">🖤</div>
-    <div class="modal-title" style="justify-content:center;">Victor Experience™</div>
+    <div class="modal-title" style="justify-content:center;">Viconnect'</div>
     <p style="color:#e6dee2; font-size:14.5px; line-height:1.75; margin:16px 0 26px; font-style:italic;">
-      Na Victor Experience™, cada encontro é pensado para ser muito mais do que um simples rolê. Aqui, cada detalhe é planejado para criar momentos especiais, boas conversas, muitas risadas e lembranças que valem a pena guardar. Nossa missão é transformar um encontro comum em uma experiência única, cheia de carinho, surpresas e conexões verdadeiras. Porque algumas histórias merecem começar de um jeito inesquecível.
+      Na Viconnect', cada encontro é pensado para ser muito mais do que um simples rolê. Aqui, cada detalhe é planejado para criar momentos especiais, boas conversas, muitas risadas e lembranças que valem a pena guardar. Nossa missão é transformar um encontro comum em uma experiência única, cheia de carinho, surpresas e conexões verdadeiras. Porque algumas histórias merecem começar de um jeito inesquecível.
     </p>
     <button class="btn-primary" id="introEnterBtn" style="width:100%; opacity:0; pointer-events:none; transition: opacity .4s ease;">Entrar no site ❤️</button>
   </div>
@@ -330,6 +345,11 @@
   <div class="modal" id="chatModal" style="max-width:420px; display:flex; flex-direction:column; height:80vh; max-height:600px; padding:20px 20px 16px;"></div>
 </div>
 
+<!-- Generic action menu (apagar conversa/mensagem, etc.) -->
+<div class="overlay" id="actionOverlay" style="z-index:350;">
+  <div class="modal" id="actionModal"></div>
+</div>
+
 <!-- View profile modal (perfil de outra pessoa) -->
 <div class="overlay" id="viewProfileOverlay">
   <div class="modal" id="viewProfileModal"></div>
@@ -342,7 +362,7 @@
 
 <section class="hero">
   <div class="hero-mark">🖤</div>
-  <h1 class="brand">Victor Experience™</h1>
+  <h1 class="brand">Viconnect'</h1>
   <p class="tagline">Experiências inesquecíveis.</p>
   <button class="cta" id="ctaPlanos">Conheça nossos planos</button>
 </section>
@@ -387,7 +407,7 @@
   </div>
 </section>
 
-<footer>Victor Experience™ — feito com 🖤 pra momentos que valem a pena.</footer>
+<footer>Viconnect' — feito com 🖤 pra momentos que valem a pena.</footer>
 
 <div id="ytPlayer" style="position:fixed; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;"></div>
 
@@ -749,6 +769,7 @@ onAuthStateChanged(auth, async (user) => {
     if(sentInvitesUnsub){ sentInvitesUnsub(); sentInvitesUnsub = null; }
     stopChatsListener();
     if(currentChatUnsub){ currentChatUnsub(); currentChatUnsub = null; }
+    if(currentChatDocUnsub){ currentChatDocUnsub(); currentChatDocUnsub = null; }
     receivedInvites = [];
     sentInvites = [];
     lastEncounter = null;
@@ -1130,6 +1151,27 @@ const chatsOverlay = document.getElementById('chatsOverlay');
 const chatsModal = document.getElementById('chatsModal');
 const chatOverlay = document.getElementById('chatOverlay');
 const chatModal = document.getElementById('chatModal');
+const actionOverlay = document.getElementById('actionOverlay');
+const actionModal = document.getElementById('actionModal');
+
+function openActionMenu(title, actions){
+  actionModal.innerHTML = `
+    <div class="modal-title" style="font-size:16px;">${title}</div>
+    <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+      ${actions.map((a, i) => `<button class="${a.primary ? 'btn-primary' : 'btn-ghost'}" id="actionBtn${i}" style="width:100%;">${a.label}</button>`).join('')}
+      <button class="btn-ghost" id="actionCancelBtn" style="width:100%;">Cancelar</button>
+    </div>
+  `;
+  actionOverlay.classList.add('show');
+  actions.forEach((a, i) => {
+    document.getElementById('actionBtn' + i).addEventListener('click', async () => {
+      actionOverlay.classList.remove('show');
+      await a.action();
+    });
+  });
+  document.getElementById('actionCancelBtn').addEventListener('click', () => actionOverlay.classList.remove('show'));
+}
+actionOverlay.addEventListener('click', (e) => { if(e.target === actionOverlay) actionOverlay.classList.remove('show'); });
 
 let myChatsUnsub = null;
 let myChats = [];
@@ -1160,21 +1202,37 @@ function stopChatsListener(){
 function updateChatsBadge(){
   const badge = document.getElementById('chatsBadge');
   if(!badge) return;
-  const hasUnread = myChats.some(c => c.lastSenderUid && c.lastSenderUid !== currentUid && !(c.readBy || []).includes(currentUid));
+  const hasUnread = myChats.some(isChatUnread);
   badge.style.display = hasUnread ? 'block' : 'none';
+}
+
+function isChatUnread(c){
+  if(!c.lastSenderUid || c.lastSenderUid === currentUid) return false;
+  const myLastRead = (c.lastReadAt && c.lastReadAt[currentUid]) || 0;
+  return (c.updatedAt || 0) > myLastRead;
+}
+
+function isClearedForMe(c){
+  const clearedAt = (c.clearedAt && c.clearedAt[currentUid]) || 0;
+  return clearedAt >= (c.updatedAt || 0);
+}
+
+async function clearChatForMe(chatId){
+  await updateDoc(doc(db, 'chats', chatId), { [`clearedAt.${currentUid}`]: Date.now() });
 }
 
 function renderChatsInbox(){
   const box = document.getElementById('chatsList');
   if(!box) return;
-  if(!myChats.length){
+  const visibleChats = myChats.filter(c => !isClearedForMe(c));
+  if(!visibleChats.length){
     box.innerHTML = `<p style="color:var(--muted); font-size:13px;">Nenhuma conversa ainda. Manda uma mensagem pelo perfil de alguém pra começar.</p>`;
     return;
   }
-  box.innerHTML = myChats.map(c => {
+  box.innerHTML = visibleChats.map(c => {
     const otherUid = (c.participants || []).find(p => p !== currentUid);
     const otherName = (c.participantNames && c.participantNames[otherUid]) || 'Alguém';
-    const unread = c.lastSenderUid && c.lastSenderUid !== currentUid && !(c.readBy || []).includes(currentUid);
+    const unread = isChatUnread(c);
     return `
       <div class="chat-conv-item" data-uid="${otherUid}" data-name="${otherName}">
         <div style="width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">👤</div>
@@ -1183,13 +1241,23 @@ function renderChatsInbox(){
           <div style="color:${unread ? 'var(--text)' : 'var(--muted)'}; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${c.lastMessage || ''}</div>
         </div>
         ${unread ? '<span style="width:9px; height:9px; border-radius:50%; background:var(--accent); flex-shrink:0;"></span>' : ''}
+        <button class="chat-del-conv-btn" data-chat-id="${c.id}" style="background:none; border:none; color:var(--muted); font-size:16px; padding:6px; flex-shrink:0; cursor:pointer;">🗑</button>
       </div>
     `;
   }).join('');
   box.querySelectorAll('.chat-conv-item').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
+      if(e.target.closest('.chat-del-conv-btn')) return;
       chatsOverlay.classList.remove('show');
       openChat(el.dataset.uid, el.dataset.name);
+    });
+  });
+  box.querySelectorAll('.chat-del-conv-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openActionMenu('Apagar esta conversa?', [
+        { label: 'Apagar só pra mim', primary: true, action: async () => { await clearChatForMe(btn.dataset.chatId); } }
+      ]);
     });
   });
 }
@@ -1278,10 +1346,48 @@ async function searchUsersForChat(){
   });
 }
 
+let currentChatMessages = [];
+
+const EMOJI_LIST = [
+  '😀','😁','😂','🤣','😊','😍','😘','😉','😎','🤩',
+  '🥰','😇','🙂','😅','😜','🤗','🤔','😴','😢','😭',
+  '😡','😱','🥳','😏','😬','🙄','😳','🤤','😷','🤒',
+  '❤️','🧡','💛','💚','💙','💜','🖤','🤍','💕','💞',
+  '💗','💖','💘','💋','😻','🔥','✨','🎉','🎁','🌹',
+  '👍','👎','🙏','👏','🤝','💪','✌️','🤙','👋','😌'
+];
+
+function setupEmojiPicker(){
+  const btn = document.getElementById('emojiBtn');
+  const panel = document.getElementById('emojiPanel');
+  const input = document.getElementById('chatInput');
+  if(!btn || !panel || !input) return;
+  panel.innerHTML = EMOJI_LIST.map(e => `<span>${e}</span>`).join('');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('show');
+  });
+  panel.querySelectorAll('span').forEach(span => {
+    span.addEventListener('click', () => {
+      input.value += span.textContent;
+      input.focus();
+    });
+  });
+  document.addEventListener('click', (e) => {
+    if(!panel.contains(e.target) && e.target !== btn){
+      panel.classList.remove('show');
+    }
+  });
+}
+let currentChatDocData = null;
+let currentChatDocUnsub = null;
+
 async function openChat(otherUid, otherName){
   currentChatWithUid = otherUid;
   currentChatWithName = otherName;
   currentChatId = chatIdFor(currentUid, otherUid);
+  currentChatMessages = [];
+  currentChatDocData = null;
 
   chatModal.innerHTML = `
     <div class="modal-title" style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
@@ -1289,11 +1395,14 @@ async function openChat(otherUid, otherName){
     </div>
     <div class="chat-messages" id="chatMessages"></div>
     <div class="chat-input-row">
+      <div class="emoji-panel" id="emojiPanel"></div>
+      <button type="button" class="emoji-btn" id="emojiBtn">😊</button>
       <input type="text" class="quiz-input" id="chatInput" placeholder="Escreva uma mensagem...">
       <button class="btn-primary" id="chatSendBtn" style="width:auto; padding:0 16px;">Enviar</button>
     </div>
   `;
   chatOverlay.classList.add('show');
+  setupEmojiPicker();
 
   document.getElementById('chatHeaderName').addEventListener('click', () => {
     chatOverlay.classList.remove('show');
@@ -1308,25 +1417,27 @@ async function openChat(otherUid, otherName){
       participantNames: { [currentUid]: visitorName, [otherUid]: otherName },
       lastMessage: '',
       lastSenderUid: null,
-      readBy: [currentUid, otherUid],
+      lastReadAt: { [currentUid]: Date.now(), [otherUid]: 0 },
+      clearedAt: {},
       updatedAt: Date.now()
     });
   } else {
-    await updateDoc(chatRef, { readBy: arrayUnion(currentUid) });
+    await updateDoc(chatRef, { [`lastReadAt.${currentUid}`]: Date.now() });
   }
+
+  if(currentChatDocUnsub) currentChatDocUnsub();
+  currentChatDocUnsub = onSnapshot(chatRef, (snap) => {
+    currentChatDocData = snap.data() || null;
+    renderChatMessages();
+  });
 
   if(currentChatUnsub) currentChatUnsub();
   currentChatUnsub = onSnapshot(
     query(collection(db, 'chats', currentChatId, 'messages'), orderBy('createdAt', 'asc')),
     (snap) => {
-      const messagesBox = document.getElementById('chatMessages');
-      if(!messagesBox) return;
-      messagesBox.innerHTML = snap.docs.map(d => {
-        const m = d.data();
-        const mine = m.senderUid === currentUid;
-        return `<div class="chat-bubble ${mine ? 'me' : 'them'}">${m.text}</div>`;
-      }).join('');
-      messagesBox.scrollTop = messagesBox.scrollHeight;
+      currentChatMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderChatMessages();
+      updateDoc(chatRef, { [`lastReadAt.${currentUid}`]: Date.now() }).catch(() => {});
     }
   );
 
@@ -1343,7 +1454,7 @@ async function openChat(otherUid, otherName){
     await updateDoc(chatRef, {
       lastMessage: text,
       lastSenderUid: currentUid,
-      readBy: [currentUid],
+      [`lastReadAt.${currentUid}`]: Date.now(),
       updatedAt: Date.now(),
       participantNames: { [currentUid]: visitorName, [otherUid]: otherName }
     });
@@ -1352,10 +1463,77 @@ async function openChat(otherUid, otherName){
   document.getElementById('chatInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMessage(); });
   document.getElementById('chatInput').focus();
 }
+
+function renderChatMessages(){
+  const messagesBox = document.getElementById('chatMessages');
+  if(!messagesBox) return;
+  const visible = currentChatMessages.filter(m => !(m.deletedFor || []).includes(currentUid));
+  const otherLastRead = (currentChatDocData && currentChatDocData.lastReadAt && currentChatDocData.lastReadAt[currentChatWithUid]) || 0;
+
+  messagesBox.innerHTML = visible.map((m) => {
+    const mine = m.senderUid === currentUid;
+    const bodyText = m.deletedForEveryone
+      ? `<i style="opacity:0.65;">Mensagem apagada</i>`
+      : m.text;
+
+    const timeStr = new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    let metaHtml = '';
+    if(!m.deletedForEveryone){
+      if(mine){
+        const seen = otherLastRead >= m.createdAt;
+        const check = seen ? '✓✓' : '✓';
+        metaHtml = `<div style="font-size:10.5px; color:${seen ? '#5aa9ff' : 'var(--muted)'}; text-align:right; margin-top:2px;">${timeStr} ${check}</div>`;
+      } else {
+        metaHtml = `<div style="font-size:10.5px; color:var(--muted); margin-top:2px;">${timeStr}</div>`;
+      }
+    }
+
+    const delTrigger = !m.deletedForEveryone
+      ? `<span class="chat-msg-del" data-id="${m.id}" data-mine="${mine}" data-created="${m.createdAt}" style="cursor:pointer; opacity:0.45; font-size:12px; align-self:center; padding:4px;">🗑</span>`
+      : '';
+
+    return `
+      <div style="display:flex; align-items:flex-end; gap:2px; ${mine ? 'flex-direction:row-reverse;' : ''}">
+        ${delTrigger}
+        <div style="display:flex; flex-direction:column; align-items:${mine ? 'flex-end' : 'flex-start'};">
+          <div class="chat-bubble ${mine ? 'me' : 'them'}">${bodyText}</div>
+          ${metaHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+
+  messagesBox.querySelectorAll('.chat-msg-del').forEach(el => {
+    el.addEventListener('click', () => {
+      openMessageDeleteMenu(el.dataset.id, el.dataset.mine === 'true', Number(el.dataset.created));
+    });
+  });
+}
+
+function openMessageDeleteMenu(messageId, mine, createdAt){
+  const withinTwoHours = (Date.now() - createdAt) < (2 * 60 * 60 * 1000);
+  const actions = [
+    { label: 'Apagar só pra mim', action: async () => {
+        await updateDoc(doc(db, 'chats', currentChatId, 'messages', messageId), { deletedFor: arrayUnion(currentUid) });
+      }
+    }
+  ];
+  if(mine && withinTwoHours){
+    actions.push({ label: 'Apagar para todos', primary: true, action: async () => {
+        await updateDoc(doc(db, 'chats', currentChatId, 'messages', messageId), { deletedForEveryone: true, text: '' });
+      }
+    });
+  }
+  openActionMenu('Apagar mensagem', actions);
+}
+
 chatOverlay.addEventListener('click', (e) => {
   if(e.target === chatOverlay){
     chatOverlay.classList.remove('show');
     if(currentChatUnsub){ currentChatUnsub(); currentChatUnsub = null; }
+    if(currentChatDocUnsub){ currentChatDocUnsub(); currentChatDocUnsub = null; }
   }
 });
 
@@ -2018,7 +2196,7 @@ const starsInput = document.getElementById('starsInput');
 function updateFeedbackSection(){
   const subtitle = document.getElementById('feedbackSubtitle');
   if(lastEncounter){
-    subtitle.textContent = `Como foi o rolê que você marcou no dia ${lastEncounter.dayLabel} no horário ${lastEncounter.timeLabel} com o Victor? O que poderia melhorar?`;
+    subtitle.textContent = `Como foi o rolê que você marcou no dia ${lastEncounter.dayLabel} no horário ${lastEncounter.timeLabel}? O que poderia melhorar?`;
   }
 }
 
