@@ -350,6 +350,11 @@
   <div class="modal" id="actionModal"></div>
 </div>
 
+<!-- Follow list modal (seguidores/seguindo) -->
+<div class="overlay" id="followListOverlay">
+  <div class="modal" id="followListModal"></div>
+</div>
+
 <!-- View profile modal (perfil de outra pessoa) -->
 <div class="overlay" id="viewProfileOverlay">
   <div class="modal" id="viewProfileModal"></div>
@@ -865,8 +870,8 @@ async function openProfileModal(){
       <input type="file" accept="image/*" id="profilePhotoInput" style="font-size:12px; color:var(--muted);">
     </div>
     <div style="display:flex; gap:18px; font-size:13px; color:var(--muted); margin-bottom:16px;">
-      <span><b style="color:var(--text);">${followersCount}</b> seguidores</span>
-      <span><b style="color:var(--text);">${followingCount}</b> seguindo</span>
+      <span class="follow-count-trigger" data-type="followers" style="cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);"><b style="color:var(--text);">${followersCount}</b> seguidores</span>
+      <span class="follow-count-trigger" data-type="following" style="cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);"><b style="color:var(--text);">${followingCount}</b> seguindo</span>
     </div>
     <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Nome ${nameLocked ? `(pode mudar em ${nameDaysLeft} dia${nameDaysLeft === 1 ? '' : 's'})` : ''}</div>
     <input type="text" class="quiz-input" id="profileNameInput" value="${profile.name || ''}" style="margin-bottom:14px;" ${nameLocked ? 'disabled' : ''}>
@@ -882,6 +887,12 @@ async function openProfileModal(){
   `;
   profileOverlay.classList.add('show');
   document.getElementById('fecharProfileBtn').addEventListener('click', () => profileOverlay.classList.remove('show'));
+  profileModal.querySelectorAll('.follow-count-trigger').forEach(el => {
+    el.addEventListener('click', () => {
+      profileOverlay.classList.remove('show');
+      openFollowList(currentUid, el.dataset.type);
+    });
+  });
   document.getElementById('profilePhotoInput').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if(!file) return;
@@ -1084,6 +1095,57 @@ async function toggleLike(uid, isLiked){
   }
 }
 
+const followListOverlay = document.getElementById('followListOverlay');
+const followListModal = document.getElementById('followListModal');
+
+async function openFollowList(ofUid, type){
+  const snap = await getDoc(doc(db, 'users', ofUid));
+  const data = snap.data() || {};
+  const list = data[type] || [];
+  const title = type === 'followers' ? 'Seguidores' : 'Seguindo';
+
+  followListModal.innerHTML = `
+    <div class="modal-title">${title}</div>
+    <div id="followListItems" style="margin-bottom:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="fecharFollowListBtn" style="width:100%;">Fechar</button>
+    </div>
+  `;
+  followListOverlay.classList.add('show');
+  document.getElementById('fecharFollowListBtn').addEventListener('click', () => followListOverlay.classList.remove('show'));
+
+  const itemsBox = document.getElementById('followListItems');
+  if(!list.length){
+    itemsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">${type === 'followers' ? 'Ninguém segue essa pessoa ainda.' : 'Ainda não segue ninguém.'}</p>`;
+    return;
+  }
+  itemsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Carregando...</p>`;
+
+  const withProfiles = await Promise.all(list.map(async p => {
+    const pSnap = await getDoc(doc(db, 'users', p.uid));
+    const pData = pSnap.data() || {};
+    return { uid: p.uid, name: pData.name || p.name, nickname: pData.nickname, photo: pData.photo };
+  }));
+
+  itemsBox.innerHTML = withProfiles.map(p => `
+    <div class="chat-conv-item" data-uid="${p.uid}">
+      ${p.photo
+        ? `<img src="${p.photo}" style="width:42px; height:42px; border-radius:50%; object-fit:cover;">`
+        : `<div style="width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:18px;">👤</div>`}
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:14.5px;">${p.name}${p.nickname ? ` <span style="color:var(--muted); font-weight:500;">"${p.nickname}"</span>` : ''}</div>
+      </div>
+    </div>
+  `).join('');
+  itemsBox.querySelectorAll('.chat-conv-item').forEach(el => {
+    el.addEventListener('click', () => {
+      followListOverlay.classList.remove('show');
+      openViewProfile(el.dataset.uid);
+    });
+  });
+}
+followListOverlay.addEventListener('click', (e) => { if(e.target === followListOverlay) followListOverlay.classList.remove('show'); });
+
 async function openViewProfile(uid){
   const snap = await getDoc(doc(db, 'users', uid));
   if(!snap.exists()) return;
@@ -1105,8 +1167,8 @@ async function openViewProfile(uid){
       <div style="font-size:19px; font-weight:700;">${data.name}${data.nickname ? ` <span style="color:var(--muted); font-weight:500; font-size:15px;">"${data.nickname}"</span>` : ''}</div>
       <div style="color:var(--muted); font-size:13.5px; margin:8px 0 16px;">${data.bio || ''}</div>
       <div style="display:flex; justify-content:center; gap:28px; margin-bottom:20px;">
-        <div><b style="font-size:16px; display:block;">${followersCount}</b><span style="color:var(--muted); font-size:12px;">seguidores</span></div>
-        <div><b style="font-size:16px; display:block;">${followingCount}</b><span style="color:var(--muted); font-size:12px;">seguindo</span></div>
+        <div class="follow-count-trigger" data-type="followers" style="cursor:pointer;"><b style="font-size:16px; display:block;">${followersCount}</b><span style="color:var(--muted); font-size:12px; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);">seguidores</span></div>
+        <div class="follow-count-trigger" data-type="following" style="cursor:pointer;"><b style="font-size:16px; display:block;">${followingCount}</b><span style="color:var(--muted); font-size:12px; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);">seguindo</span></div>
         <div><b style="font-size:16px; display:block;" id="viewProfileLikesCount">${likesCount}</b><span style="color:var(--muted); font-size:12px;">curtidas</span></div>
       </div>
       <button class="btn-primary" id="viewProfileFollowBtn" data-following="${isFollowing}" style="width:100%;">${isFollowing ? '✓ Seguindo' : '➕ Seguir'}</button>
@@ -1117,6 +1179,12 @@ async function openViewProfile(uid){
   `;
   viewProfileOverlay.classList.add('show');
   document.getElementById('fecharViewProfileBtn').addEventListener('click', () => viewProfileOverlay.classList.remove('show'));
+  viewProfileModal.querySelectorAll('.follow-count-trigger').forEach(el => {
+    el.addEventListener('click', () => {
+      viewProfileOverlay.classList.remove('show');
+      openFollowList(uid, el.dataset.type);
+    });
+  });
   document.getElementById('viewProfileMsgBtn').addEventListener('click', () => {
     viewProfileOverlay.classList.remove('show');
     openChat(uid, data.name);
