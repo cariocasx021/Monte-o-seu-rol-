@@ -854,6 +854,7 @@ async function openProfileModal(){
 
   const followingCount = (profile.following || []).length;
   const followersCount = (profile.followers || []).length;
+  const likesCount = (profile.likes || []).length;
 
   const daysSinceNameChange = Math.floor((Date.now() - (profile.nameChangedAt || 0)) / 86400000);
   const nameDaysLeft = Math.max(0, 30 - daysSinceNameChange);
@@ -872,6 +873,7 @@ async function openProfileModal(){
     <div style="display:flex; gap:18px; font-size:13px; color:var(--muted); margin-bottom:16px;">
       <span class="follow-count-trigger" data-type="followers" style="cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);"><b style="color:var(--text);">${followersCount}</b> seguidores</span>
       <span class="follow-count-trigger" data-type="following" style="cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);"><b style="color:var(--text);">${followingCount}</b> seguindo</span>
+      <span id="myLikesTrigger" style="cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.25);"><b style="color:var(--text);">${likesCount}</b> curtidas</span>
     </div>
     <div style="color:var(--muted); font-size:13px; margin-bottom:6px;">Nome ${nameLocked ? `(pode mudar em ${nameDaysLeft} dia${nameDaysLeft === 1 ? '' : 's'})` : ''}</div>
     <input type="text" class="quiz-input" id="profileNameInput" value="${profile.name || ''}" style="margin-bottom:14px;" ${nameLocked ? 'disabled' : ''}>
@@ -892,6 +894,10 @@ async function openProfileModal(){
       profileOverlay.classList.remove('show');
       openFollowList(currentUid, el.dataset.type);
     });
+  });
+  document.getElementById('myLikesTrigger').addEventListener('click', () => {
+    profileOverlay.classList.remove('show');
+    openLikersList();
   });
   document.getElementById('profilePhotoInput').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -1145,6 +1151,54 @@ async function openFollowList(ofUid, type){
   });
 }
 followListOverlay.addEventListener('click', (e) => { if(e.target === followListOverlay) followListOverlay.classList.remove('show'); });
+
+async function openLikersList(){
+  if(!currentUid) return;
+  const snap = await getDoc(doc(db, 'users', currentUid));
+  const data = snap.data() || {};
+  const list = data.likes || [];
+
+  followListModal.innerHTML = `
+    <div class="modal-title">❤️ Quem curtiu seu perfil</div>
+    <div style="color:var(--muted); font-size:12.5px; margin-bottom:14px;">Só você vê essa lista.</div>
+    <div id="followListItems" style="margin-bottom:16px;"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="fecharFollowListBtn" style="width:100%;">Fechar</button>
+    </div>
+  `;
+  followListOverlay.classList.add('show');
+  document.getElementById('fecharFollowListBtn').addEventListener('click', () => followListOverlay.classList.remove('show'));
+
+  const itemsBox = document.getElementById('followListItems');
+  if(!list.length){
+    itemsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Ninguém curtiu seu perfil ainda.</p>`;
+    return;
+  }
+  itemsBox.innerHTML = `<p style="color:var(--muted); font-size:13px;">Carregando...</p>`;
+
+  const withProfiles = await Promise.all(list.map(async l => {
+    const pSnap = await getDoc(doc(db, 'users', l.uid));
+    const pData = pSnap.data() || {};
+    return { uid: l.uid, name: pData.name || 'Alguém', nickname: pData.nickname, photo: pData.photo };
+  }));
+
+  itemsBox.innerHTML = withProfiles.map(p => `
+    <div class="chat-conv-item" data-uid="${p.uid}">
+      ${p.photo
+        ? `<img src="${p.photo}" style="width:42px; height:42px; border-radius:50%; object-fit:cover;">`
+        : `<div style="width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:18px;">👤</div>`}
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:14.5px;">${p.name}${p.nickname ? ` <span style="color:var(--muted); font-weight:500;">"${p.nickname}"</span>` : ''}</div>
+      </div>
+    </div>
+  `).join('');
+  itemsBox.querySelectorAll('.chat-conv-item').forEach(el => {
+    el.addEventListener('click', () => {
+      followListOverlay.classList.remove('show');
+      openViewProfile(el.dataset.uid);
+    });
+  });
+}
 
 async function openViewProfile(uid){
   const snap = await getDoc(doc(db, 'users', uid));
